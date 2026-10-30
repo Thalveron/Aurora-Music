@@ -6,13 +6,17 @@ REPO='Thalveron/Aurora-Music'
 def run(args,cwd=None):
     return subprocess.run([str(x) for x in args],cwd=cwd,check=True,capture_output=True,text=True).stdout.strip()
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--apk',required=True,type=Path);p.add_argument('--notes',required=True,type=Path);p.add_argument('--gh',default=shutil.which('gh'));a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--apk',required=True,type=Path);p.add_argument('--notes',required=True,type=Path);p.add_argument('--gh',default=shutil.which('gh'));p.add_argument('--verify-only',action='store_true');a=p.parse_args()
     root=Path(run(['git','rev-parse','--show-toplevel']))
-    if not a.gh:p.error('GitHub CLI is required')
-    if run(['git','status','--porcelain'],root):p.error('Commit the intended public source first')
-    sdk=Path(os.environ['ANDROID_HOME']);tools=sorted((sdk/'build-tools').glob('*'),key=lambda x:[int(n) for n in x.name.split('.')])[-1]
+    if not a.gh and not a.verify_only:p.error('GitHub CLI is required')
+    if not a.verify_only and run(['git','status','--porcelain'],root):p.error('Commit the intended public source first')
+    sdk=Path(os.environ['ANDROID_HOME']);available=[x for x in (sdk/'build-tools').glob('*') if os.access(x/'aapt',os.X_OK) and os.access(x/'apksigner',os.X_OK)]
+    if not available:p.error('No executable Android build tools found')
+    tools=sorted(available,key=lambda x:[int(n) for n in x.name.split('.')])[-1]
     apk=a.apk.resolve();notes=a.notes.resolve();run([tools/'apksigner','verify',apk]);badging=run([tools/'aapt','dump','badging',apk]);m=re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'",badging)
     if not m or m[1]!='com.craftworks.music.tvcustom' or not re.fullmatch(r'\d+\.\d+\.\d+',m[3]):p.error('Unexpected APK identity')
+    if a.verify_only:
+        print('Verified APK package, version, signature and available publishing tools');return
     code=int(m[2]);version=m[3];tag='v'+version;path=root/'updates/latest.json';old=json.loads(path.read_text()) if path.exists() else {}
     if code<=old.get('latest',{}).get('versionCode',0):p.error('Increase versionCode before publishing')
     if subprocess.run([a.gh,'release','view',tag,'--repo',REPO],capture_output=True).returncode==0:p.error('Release already exists; do not replace its APK')
