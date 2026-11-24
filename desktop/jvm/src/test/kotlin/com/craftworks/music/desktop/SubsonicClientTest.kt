@@ -120,7 +120,7 @@ class SubsonicClientTest {
                 val payload = when (exchange.requestURI.path.substringAfterLast("/")) {
                     "getAlbumList2.view" -> """"albumList2":{"album":[{"id":"a","name":"Album"}]}"""
                     "getAlbum.view" -> """"album":{"id":"a","name":"Album","song":[{"id":"s","title":"Track"}]}"""
-                    "getPlaylists.view" -> """"playlists":{"playlist":[{"id":"p","name":"Playlist","created":"","changed":"","songCount":1,"duration":2}]}"""
+                    "getPlaylists.view" -> """"playlists":{"playlist":[{"id":"p","name":"Playlist"}]}"""
                     "getPlaylist.view" -> """"playlist":{"id":"p","name":"Playlist","created":"","changed":"","songCount":1,"duration":2,"entry":[{"id":"s","title":"Track"}]}"""
                     else -> error("Unexpected endpoint")
                 }

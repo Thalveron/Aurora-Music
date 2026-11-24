@@ -128,10 +128,10 @@ sealed class MediaData {
         val comment: String? = "",
         val owner: String? = "",
         val public: Boolean? = true,
-        val created: String,
-        val changed: String,
-        val songCount: Int,
-        val duration: Int,
+        val created: String = "",
+        val changed: String = "",
+        val songCount: Int = 0,
+        val duration: Int = 0,
         var coverArt: String? = "",
         @SerialName("entry")
         var songs: MutableList<Song>? = mutableListOf()

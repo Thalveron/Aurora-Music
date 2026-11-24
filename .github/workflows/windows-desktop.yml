@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -38,6 +38,19 @@ jobs:
       - name: Test and build installer
         shell: pwsh
         run: .\gradlew.bat -p desktop/jvm test packageExe --no-daemon
+      - name: Smoke test packaged launcher
+        shell: pwsh
+        run: |
+          $launcher = 'desktop/jvm/build/compose/binaries/main/app/AuroraMusic/AuroraMusic.exe'
+          if (-not (Test-Path $launcher)) { throw 'Packaged launcher not found' }
+          $process = Start-Process -FilePath $launcher -PassThru
+          try {
+            Start-Sleep -Seconds 15
+            $process.Refresh()
+            if ($process.HasExited) { throw "Packaged launcher exited with code $($process.ExitCode)" }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
       - name: Upload build for testing
         uses: actions/upload-artifact@v4
         with:

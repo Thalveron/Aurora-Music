@@ -78,6 +78,7 @@ private fun DesktopApp(exit: () -> Unit) {
     var client by remember { mutableStateOf<SubsonicClient?>(null) }
     var songs by remember { mutableStateOf<List<MediaData.Song>>(emptyList()) }
     var albums by remember { mutableStateOf<List<MediaData.Album>>(emptyList()) }
+    var hasMoreAlbums by remember { mutableStateOf(false) }
     var playlists by remember { mutableStateOf<List<MediaData.Playlist>>(emptyList()) }
     var libraryTab by remember { mutableStateOf("songs") }
     var current by remember { mutableStateOf<MediaData.Song?>(null) }
@@ -108,6 +109,16 @@ private fun DesktopApp(exit: () -> Unit) {
         }
     }
 
+    fun playSong(song: MediaData.Song) {
+        val active = client ?: return
+        if (song.navidromeID.isBlank()) {
+            message = label("服务器返回的歌曲 ID 无效", "The server returned an invalid song ID")
+            return
+        }
+        current = song
+        player.play(active, song)
+    }
+
     LaunchedEffect(Unit) {
         try {
             val saved = withContext(Dispatchers.IO) {
@@ -120,7 +131,7 @@ private fun DesktopApp(exit: () -> Unit) {
                 password = saved.second
             }
         } catch (e: IOException) {
-            message = e.message.orEmpty()
+            message = describeError(e, chinese)
         }
         if (settings.background.isNotBlank()) {
             try {
@@ -140,7 +151,7 @@ private fun DesktopApp(exit: () -> Unit) {
             try {
                 lyrics = withContext(Dispatchers.IO) { loadLyrics(active, selected) }
             } catch (e: IOException) {
-                lyricError = label("歌词加载失败", "Could not load lyrics") + ": " + e.message.orEmpty()
+                lyricError = label("歌词加载失败", "Could not load lyrics") + ": " + describeError(e, chinese)
             }
         }
     }
@@ -149,11 +160,7 @@ private fun DesktopApp(exit: () -> Unit) {
         if (playback.ended) {
             val index = songs.indexOfFirst { it.navidromeID == current?.navidromeID }
             val next = songs.getOrNull(index + 1).takeIf { index >= 0 }
-            val active = client
-            if (next != null && active != null) {
-                current = next
-                player.play(active, next)
-            }
+            if (next != null) playSong(next)
         }
     }
 
@@ -234,7 +241,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                     password = ""
                                     message = label("已删除保存的服务器", "Saved server removed")
                                 } catch (e: IOException) {
-                                    message = e.message.orEmpty()
+                                    message = describeError(e, chinese)
                                 }
                             }) { Text(label("删除保存的服务器", "Remove saved server")) }
                             Spacer(Modifier.height(8.dp))
@@ -253,7 +260,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                             update = withContext(Dispatchers.IO) { Updater().check() }
                                             message = update?.let { label("发现新版本 ", "Update available: ") + it.version }
                                                 ?: label("没有找到可验证的新版本", "No verifiable update found")
-                                        } catch (e: IOException) { message = e.message ?: label("更新检查失败", "Update check failed") }
+                                        } catch (e: IOException) { message = describeError(e, chinese) }
                                         finally { busy = false }
                                     }
                                 }) { Text(label("检查更新", "Check for updates")) }
@@ -271,7 +278,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                                 try {
                                                     val saved = withContext(Dispatchers.IO) { Updater().download(available, useProxy, directory) }
                                                     message = label("更新已验证并保存：", "Verified update saved: ") + saved
-                                                } catch (e: IOException) { message = e.message ?: label("更新下载失败", "Update download failed") }
+                                                } catch (e: IOException) { message = describeError(e, chinese) }
                                                 finally { busy = false }
                                             }
                                         }
@@ -312,9 +319,9 @@ private fun DesktopApp(exit: () -> Unit) {
                                         appliedQuery = ""
                                         hasMore = initial.size == 100
                                     } catch (e: IllegalArgumentException) {
-                                        message = e.message ?: label("服务器设置无效", "Invalid server settings")
+                                        message = describeError(e, chinese)
                                     } catch (e: IOException) {
-                                        message = e.message ?: label("连接或保存失败", "Connection or save failed")
+                                        message = describeError(e, chinese)
                                     } finally { busy = false }
                                 }
                             }) { Text(label("连接并保存", "Connect and save")) }
@@ -327,9 +334,10 @@ private fun DesktopApp(exit: () -> Unit) {
                                     scope.launch {
                                         try {
                                             albums = withContext(Dispatchers.IO) { active.albums() }
+                                            hasMoreAlbums = albums.size == 100
                                             libraryTab = "albums"
-                                            message = if (albums.size == 100) label("仅显示前 100 张专辑", "Showing the first 100 albums") else ""
-                                        } catch (e: IOException) { message = e.message ?: label("加载专辑失败", "Could not load albums") }
+                                            message = ""
+                                        } catch (e: IOException) { message = describeError(e, chinese) }
                                         finally { busy = false }
                                     }
                                 }) { Text(label("专辑", "Albums")) }
@@ -341,7 +349,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                             playlists = withContext(Dispatchers.IO) { active.playlists() }
                                             libraryTab = "playlists"
                                             message = ""
-                                        } catch (e: IOException) { message = e.message ?: label("加载播放列表失败", "Could not load playlists") }
+                                        } catch (e: IOException) { message = describeError(e, chinese) }
                                         finally { busy = false }
                                     }
                                 }) { Text(label("播放列表", "Playlists")) }
@@ -361,7 +369,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                             hasMore = found.size == 100
                                             libraryTab = "songs"
                                         }
-                                        catch (e: IOException) { message = e.message ?: label("搜索失败", "Search failed") }
+                                        catch (e: IOException) { message = describeError(e, chinese) }
                                         finally { busy = false }
                                     }
                                 }) { Text(label("搜索", "Search")) }
@@ -379,6 +387,10 @@ private fun DesktopApp(exit: () -> Unit) {
                                     Surface(shape = RoundedCornerShape(12.dp), color = Color(0xff292f40).copy(alpha = 0.85f),
                                         modifier = Modifier.fillMaxWidth().clickable(enabled = !busy) {
                                             val active = client ?: return@clickable
+                                            if (album.navidromeID.isBlank()) {
+                                                message = label("服务器返回的专辑 ID 无效", "The server returned an invalid album ID")
+                                                return@clickable
+                                            }
                                             busy = true
                                             scope.launch {
                                                 try {
@@ -386,7 +398,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                                     hasMore = false
                                                     libraryTab = "songs"
                                                     message = ""
-                                                } catch (e: IOException) { message = e.message ?: label("加载专辑失败", "Could not load album") }
+                                                } catch (e: IOException) { message = describeError(e, chinese) }
                                                 finally { busy = false }
                                             }
                                         }) {
@@ -396,10 +408,30 @@ private fun DesktopApp(exit: () -> Unit) {
                                         }
                                     }
                                 }
+                                if (libraryTab == "albums" && hasMoreAlbums) item {
+                                    TextButton(enabled = !busy, onClick = {
+                                        val active = client ?: return@TextButton
+                                        val offset = albums.size
+                                        busy = true
+                                        scope.launch {
+                                            try {
+                                                val found = withContext(Dispatchers.IO) { active.albums(offset = offset) }
+                                                albums = albums + found
+                                                hasMoreAlbums = found.size == 100
+                                            } catch (e: IOException) {
+                                                message = describeError(e, chinese)
+                                            } finally { busy = false }
+                                        }
+                                    }) { Text(label("加载更多", "Load more")) }
+                                }
                                 if (libraryTab == "playlists") itemsIndexed(playlists) { _, playlist ->
                                     Surface(shape = RoundedCornerShape(12.dp), color = Color(0xff292f40).copy(alpha = 0.85f),
                                         modifier = Modifier.fillMaxWidth().clickable(enabled = !busy) {
                                             val active = client ?: return@clickable
+                                            if (playlist.navidromeID.isBlank()) {
+                                                message = label("服务器返回的播放列表 ID 无效", "The server returned an invalid playlist ID")
+                                                return@clickable
+                                            }
                                             busy = true
                                             scope.launch {
                                                 try {
@@ -407,7 +439,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                                     hasMore = false
                                                     libraryTab = "songs"
                                                     message = ""
-                                                } catch (e: IOException) { message = e.message ?: label("加载播放列表失败", "Could not load playlist") }
+                                                } catch (e: IOException) { message = describeError(e, chinese) }
                                                 finally { busy = false }
                                             }
                                         }) { Text(playlist.name, Modifier.padding(14.dp)) }
@@ -415,8 +447,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                 if (libraryTab == "songs") itemsIndexed(songs) { index, song ->
                                     Surface(shape = RoundedCornerShape(12.dp), color = Color(0xff292f40).copy(alpha = 0.85f),
                                         modifier = Modifier.fillMaxWidth().clickable {
-                                            current = song
-                                            player.play(client!!, song)
+                                            playSong(song)
                                         }) {
                                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                             Text("${index + 1}", Modifier.width(40.dp), color = MaterialTheme.colorScheme.primary)
@@ -440,7 +471,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                                 songs = songs + found
                                                 hasMore = found.size == 100
                                             } catch (e: IOException) {
-                                                message = e.message ?: label("加载失败", "Could not load more songs")
+                                                message = describeError(e, chinese)
                                             } finally { busy = false }
                                         }
                                     }) { Text(label("加载更多", "Load more")) }
@@ -456,15 +487,13 @@ private fun DesktopApp(exit: () -> Unit) {
                                             TextButton(onClick = {
                                                 val index = songs.indexOfFirst { it.navidromeID == current?.navidromeID }
                                                 val previous = songs.getOrNull(index - 1)
-                                                val active = client
-                                                if (previous != null && active != null) { current = previous; player.play(active, previous) }
+                                                if (previous != null) playSong(previous)
                                             }) { Text(label("上一首", "Previous")) }
                                             TextButton(onClick = { player.toggle() }) { Text(if (playback.playing) label("暂停", "Pause") else label("播放", "Play")) }
                                             TextButton(onClick = {
                                                 val index = songs.indexOfFirst { it.navidromeID == current?.navidromeID }
                                                 val next = songs.getOrNull(index + 1).takeIf { index >= 0 }
-                                                val active = client
-                                                if (next != null && active != null) { current = next; player.play(active, next) }
+                                                if (next != null) playSong(next)
                                             }) { Text(label("下一首", "Next")) }
                                             Slider(
                                                 value = if (playback.durationMs > 0) (playback.positionMs.toFloat() / playback.durationMs).coerceIn(0f, 1f) else 0f,
@@ -496,6 +525,39 @@ private fun DesktopApp(exit: () -> Unit) {
 private fun formatTime(millis: Long): String {
     val seconds = millis.coerceAtLeast(0) / 1000
     return "%d:%02d".format(seconds / 60, seconds % 60)
+}
+
+private fun describeError(error: Exception, chinese: Boolean): String {
+    if (!chinese) return error.message ?: "Operation failed"
+    if (error is SubsonicHttpException) return "音乐服务器返回 HTTP ${error.status}"
+    if (error is SubsonicServerException) {
+        return when (error.code) {
+            40 -> "用户名或密码错误（服务器错误 40）"
+            50 -> "此账号没有执行操作的权限（服务器错误 50）"
+            else -> "音乐服务器错误 ${error.code}: ${error.message.orEmpty()}"
+        }
+    }
+    return when (error.message) {
+        "Invalid server address" -> "服务器地址无效"
+        "Use an HTTP(S) server address" -> "请输入 HTTP 或 HTTPS 服务器地址"
+        "Unencrypted HTTP requires explicit confirmation" -> "使用 HTTP 前请确认允许不加密连接"
+        "Server address must not contain credentials, query, or fragment" -> "服务器地址不能包含账号密码、查询参数或片段"
+        "Username and password are required" -> "请输入用户名和密码"
+        "Could not connect to the music server" -> "无法连接音乐服务器"
+        "Music server request interrupted" -> "音乐服务器请求已中断"
+        "Music server returned an invalid response" -> "音乐服务器返回了无效响应"
+        "Music server response is too large" -> "音乐服务器响应过大"
+        "Unable to protect server credentials" -> "无法加密服务器密码"
+        "Unable to save server settings" -> "无法保存服务器设置"
+        "Unable to remove server settings" -> "无法删除服务器设置"
+        "Unable to decrypt saved credentials for this Windows user" -> "无法为当前 Windows 用户解密保存的密码"
+        "Unable to reach the update server" -> "无法连接更新服务器"
+        "Update integrity verification failed" -> "更新文件完整性校验失败"
+        "Update exceeds expected size" -> "更新文件超过预期大小"
+        "Invalid update metadata" -> "更新信息无效"
+        "Update download redirected to an untrusted address" -> "更新下载被重定向到不受信任的地址"
+        else -> error.message ?: "操作失败"
+    }
 }
 
 private fun loadBackground(path: Path): ImageBitmap {
