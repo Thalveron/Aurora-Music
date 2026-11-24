@@ -1,5 +1,7 @@
 package com.craftworks.music.ui.screens.tv
 
+import com.craftworks.music.ui.elements.tv.TvScreenTitle
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.Alignment
@@ -60,7 +62,7 @@ fun TvSongsScreen(
     val refreshing by viewModel.isLoading.collectAsStateWithLifecycle()
     val count by viewModel.librarySongCount.collectAsStateWithLifecycle()
     val tabs = listOf(
-        if(count>=0)"歌曲（共${count}首）" else stringResource(R.string.songs),
+        if (count >= 0) stringResource(R.string.songs) + " · " + stringResource(R.string.Tv_Songs_Count, count) else stringResource(R.string.songs),
         stringResource(R.string.Label_Sort_Starred),
     )
     val showFavoritesOnly by viewModel.showFavoritesOnly.collectAsStateWithLifecycle()
@@ -111,8 +113,11 @@ fun TvSongsScreen(
             .focusRestorer(focusRequester),
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 24.dp),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(20.dp),
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(24.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
     ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            TvScreenTitle(title = stringResource(R.string.songs))
+        }
         item() {
           Row(modifier=Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
             TabRow(
@@ -146,7 +151,7 @@ fun TvSongsScreen(
                 }
             }
             Button(onClick={DataRefreshManager.notifyDataSourcesChanged()},enabled=!refreshing,modifier=Modifier.padding(start=20.dp)){
-                Text(if(refreshing)"刷新中…" else "刷新曲库")
+                Text(stringResource(if (refreshing) R.string.Tv_Refreshing else R.string.Tv_Refresh_Library))
             }
           }
         }

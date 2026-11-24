@@ -30,6 +30,8 @@ Use JDK 21 and the Android SDK version declared by `app/build.gradle.kts`:
 ./gradlew :app:assembleRelease :app:testDebugUnitTest
 ```
 
+Every push is also built by GitHub Actions (`.github/workflows/build.yml`), which runs the unit tests, uploads the APK as an artifact, and walks the TV first-run setup on an emulator with `tools/tv_smoke.sh`. That APK is signed with a throwaway key and is for testing only.
+
 To update an existing installation, keep the original application ID and signing key. Signing keys are not included in this repository. Builds made with a different signing key cannot replace official APKs without uninstalling them first.
 
 ## Online updates

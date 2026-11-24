@@ -5,12 +5,17 @@ import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.craftworks.music.data.NavidromeLibrary
+import com.craftworks.music.data.NavidromeProvider
 import com.craftworks.music.data.model.Lyric
 import com.craftworks.music.data.model.MediaData
 import com.craftworks.music.data.model.toLyric
 import com.craftworks.music.data.model.toLyrics
 import com.craftworks.music.managers.NavidromeManager
+import com.craftworks.music.providers.navidrome.ServerCheck
+import com.craftworks.music.providers.navidrome.classifyNetworkFailure
+import com.craftworks.music.providers.navidrome.interpretPingResponse
 import com.craftworks.music.providers.navidrome.navidromeStatus
+import com.craftworks.music.providers.navidrome.normalizeServerUrl
 import com.craftworks.music.providers.navidrome.parseNavidromeAlbumJSON
 import com.craftworks.music.providers.navidrome.parseNavidromeAlbumListJSON
 import com.craftworks.music.providers.navidrome.parseNavidromeArtistAlbumsJSON
@@ -30,10 +35,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logger
-import io.ktor.client.plugins.logging.Logging
-import io.ktor.client.plugins.logging.SIMPLE
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.statement.HttpResponse
@@ -41,6 +42,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -64,10 +66,6 @@ class NavidromeDataSource @Inject constructor() {
                 json(json)
             }
             install(HttpCache)
-            install(Logging) {
-                level = LogLevel.ALL
-                logger = Logger.SIMPLE
-            }
         }
     }
 
@@ -110,10 +108,6 @@ class NavidromeDataSource @Inject constructor() {
                 json(json)
             }
             install(HttpCache)
-            install(Logging) {
-                level = LogLevel.ALL
-                logger = Logger.SIMPLE
-            }
         }
     }
 
@@ -127,7 +121,7 @@ class NavidromeDataSource @Inject constructor() {
         val salt = generateSalt(8)
         val token = md5Hash(server.password + salt)
 
-        val url = URLBuilder("${server.url}/rest/${endpoint.replace(" ", "%20")}").apply {
+        val url = URLBuilder("${server.url.trimEnd('/')}/rest/${endpoint.replace(" ", "%20")}").apply {
             parameters.append("u", server.username)
             parameters.append("t", token)
             parameters.append("s", salt)
@@ -153,7 +147,8 @@ class NavidromeDataSource @Inject constructor() {
             }
 
             if (response.status != HttpStatusCode.OK) {
-                Log.w("NAVIDROME", "HTTP ${response.status} for URL: $url")
+                Log.w("NAVIDROME", "HTTP ${response.status} for $endpoint")
+                navidromeStatus.value = "HTTP ${response.status.value}"
                 return@withContext emptyList()
             }
             val responseContent = response.bodyAsText()
@@ -200,6 +195,37 @@ class NavidromeDataSource @Inject constructor() {
         }
 
         parsedData
+    }
+
+    /** Tests [server] without registering it, so the active server and library are left alone. */
+    suspend fun checkServer(server: NavidromeProvider): ServerCheck = withContext(Dispatchers.IO) {
+        val base = normalizeServerUrl(server.url) ?: return@withContext ServerCheck.InvalidUrl
+        val salt = generateSalt(8)
+        val url = try {
+            URLBuilder("$base/rest/ping.view").apply {
+                parameters.append("u", server.username)
+                parameters.append("t", md5Hash(server.password + salt))
+                parameters.append("s", salt)
+                parameters.append("v", "1.16.1")
+                parameters.append("c", "Chora")
+                parameters.append("f", "json")
+            }.buildString()
+        } catch (_: Exception) {
+            return@withContext ServerCheck.InvalidUrl
+        }
+
+        try {
+            val activeClient = if (server.allowSelfSignedCert == true) insecureClient else client
+            val response = activeClient.get(url) {
+                headers { append("Cache-Control", "no-cache") }
+            }
+            interpretPingResponse(response.status.value, response.bodyAsText())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("NAVIDROME", "Server check failed: ${e.javaClass.simpleName}")
+            classifyNetworkFailure(e)
+        }
     }
 
     suspend fun pingNavidromeServer(): List<String> = withContext(Dispatchers.IO) {

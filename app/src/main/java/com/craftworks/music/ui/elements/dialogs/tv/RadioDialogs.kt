@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import com.craftworks.music.ui.elements.tv.auroraBackground
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component1
 import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component2
@@ -75,7 +76,7 @@ fun AddRadioDialog(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .drawBehind { drawRect(color = backgroundColor) }
+                .auroraBackground()
                 .padding(horizontal = 48.dp, vertical = 48.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.Top
@@ -231,7 +232,7 @@ fun ModifyRadioDialog(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .drawBehind { drawRect(color = backgroundColor) }
+                .auroraBackground()
                 .padding(horizontal = 48.dp, vertical = 48.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.Top

@@ -48,4 +48,25 @@ Downloads are stored in the app private `music-updates/` directory. A non-export
 
 `bytes` and `sha256` must be calculated from the final signed APK. The example placeholders above are not installable metadata.
 
-For future releases, increase both `versionName` and `versionCode`, sign with the existing private signing key and run `tools/publish_release.py`. It uploads the release first, then updates the manifest. Signing keys and user data must never be committed.
+For future releases, increase both `versionName` and `versionCode`, sign with the existing private signing key and run `tools/publish_release.py`. It uploads the APK first, then updates the manifest. All clients share one release per version: if the tag already exists (for example with the Windows installer), the APK and its `.sha256` file are added to it; an APK that is already there is never replaced. Signing keys and user data must never be committed.
+
+## Signing key and the 1.33.0 reinstall
+
+From 1.33.0 the APK is signed with a new, dedicated release key. Android refuses to install it over 1.32.0, which used a different certificate, and the 1.32.0 updater will report a signature error for it. Uninstall 1.32.0 once and install 1.33.0; music sources have to be added again. Later versions update normally. Aurora Launcher's signature-protected lyric bridge only works if the launcher is signed with the same key.
+
+The key lives only in repository secrets, used by `.github/workflows/release.yml`:
+
+| Secret | Content |
+| --- | --- |
+| `AURORA_KEYSTORE_BASE64` | `base64 -w0 aurora-release.jks` |
+| `AURORA_KEYSTORE_PASSWORD` | keystore password |
+| `AURORA_KEY_ALIAS` | key alias, for example `aurora` |
+| `AURORA_KEY_PASSWORD` | key password |
+
+Create the key once and keep an offline copy; if it is lost, every device has to reinstall again:
+
+```sh
+keytool -genkeypair -v -keystore aurora-release.jks -alias aurora -keyalg RSA -keysize 4096 -validity 10950
+```
+
+To release: merge to `main`, then run **Actions → Release Android → Run workflow** on `main`.

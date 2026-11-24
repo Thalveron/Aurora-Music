@@ -7,6 +7,8 @@ import androidx.core.content.edit
 import com.craftworks.music.data.NavidromeLibrary
 import com.craftworks.music.data.NavidromeProvider
 import com.craftworks.music.data.datasource.navidrome.NavidromeDataSource
+import com.craftworks.music.providers.navidrome.normalizeServerUrl
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,11 +39,7 @@ object NavidromeManager {
     private val _syncStatus = MutableStateFlow(false)
 
     suspend fun addServer(server: NavidromeProvider, isPing: Boolean = false) {
-        Log.d("NAVIDROME", "Added server $server")
-        server.url = if (!server.url.trim().startsWith("http"))
-            "http://" + server.url.trim()
-        else
-            server.url.trim()
+        server.url = normalizeServerUrl(server.url) ?: server.url.trim()
 
         servers[server.id] = server
         _currentServerId.value = server.id
@@ -49,7 +47,15 @@ object NavidromeManager {
         if (isPing)
             return
 
-        val fetchedLibraries = NavidromeDataSource().getNavidromeLibraries().map { Pair(it, true) }
+        // A server that cannot list its folders is still usable, so never lose it over that.
+        val fetchedLibraries = try {
+            NavidromeDataSource().getNavidromeLibraries().map { Pair(it, true) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("NAVIDROME", "Could not load music folders", e)
+            emptyList()
+        }
 
         setServerLibraries(server.id, fetchedLibraries)
         if (server.id == _currentServerId.value) {
@@ -140,12 +146,20 @@ object NavidromeManager {
     }
 
     private fun loadServers() {
-        _currentServerId.value = sharedPreferences.getString(PREF_CURRENT_SERVER, null)
         val serversJson = sharedPreferences.getString(PREF_SERVERS, null)
         if (serversJson != null) {
-            val loadedServers: Map<String, NavidromeProvider> = json.decodeFromString(serversJson)
+            // Unreadable saved data must not stop the app from starting.
+            val loadedServers: Map<String, NavidromeProvider> = try {
+                json.decodeFromString(serversJson)
+            } catch (e: Exception) {
+                Log.e("NAVIDROME", "Saved servers could not be read", e)
+                emptyMap()
+            }
+            loadedServers.values.forEach { it.url = normalizeServerUrl(it.url) ?: it.url }
             servers.putAll(loadedServers)
         }
+        _currentServerId.value = sharedPreferences.getString(PREF_CURRENT_SERVER, null)
+            ?.takeIf { servers.containsKey(it) }
         _libraries.value = _currentServerId.value?.let { servers[it]?.libraryIds } ?: emptyList()
         updateServersFlow()
     }

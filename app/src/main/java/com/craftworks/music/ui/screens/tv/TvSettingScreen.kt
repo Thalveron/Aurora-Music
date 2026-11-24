@@ -1,5 +1,6 @@
 package com.craftworks.music.ui.screens.tv
 
+import com.craftworks.music.ui.elements.tv.TvScreenTitle
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -50,12 +51,18 @@ fun TvSettingScreen(
             .focusRestorer(focusRequester)
             .focusRequester(focusRequester)
             .focusGroup(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        TvScreenTitle(
+            title = stringResource(R.string.settings),
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+
         SettingsButton(
             Screen.S_Appearance.route,
             R.drawable.s_a_palette,
             R.string.Settings_Header_Appearance,
+            R.string.Tv_Settings_Appearance_Desc,
             navHostController,
             Modifier.onFocusChanged {
                 focusRequester.saveFocusedChild()
@@ -66,6 +73,7 @@ fun TvSettingScreen(
             Screen.S_Providers.route,
             R.drawable.s_m_media_providers,
             R.string.Settings_Header_Media,
+            R.string.Tv_Settings_Media_Desc,
             navHostController,
             Modifier.onFocusChanged {
                 focusRequester.saveFocusedChild()
@@ -76,6 +84,7 @@ fun TvSettingScreen(
             Screen.S_Playback.route,
             R.drawable.s_m_playback,
             R.string.Settings_Header_Playback,
+            R.string.Tv_Settings_Playback_Desc,
             navHostController,
             Modifier.onFocusChanged {
                 focusRequester.saveFocusedChild()
@@ -83,7 +92,21 @@ fun TvSettingScreen(
         )
         WideButton(
             onClick = { com.craftworks.music.updates.MusicUpdateActivity.open(context) },
-            title = { Text(stringResource(R.string.music_update_title)) }
+            contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            icon = {
+                Icon(
+                    imageVector = ImageVector.vectorResource(R.drawable.rounded_download_24),
+                    contentDescription = null,
+                    modifier = Modifier.size(ButtonDefaults.IconSize)
+                )
+            },
+            title = { Text(stringResource(R.string.music_update_title)) },
+            subtitle = {
+                Text(
+                    stringResource(R.string.Tv_Settings_Update_Desc) + " · " +
+                            com.craftworks.music.updates.MusicUpdates.version(context)
+                )
+            }
         )
     }
 }
@@ -93,6 +116,7 @@ private fun SettingsButton(
     route: String,
     icon: Int,
     text: Int,
+    description: Int,
     navHostController: NavHostController,
     modifier: Modifier = Modifier
 ) {
@@ -115,6 +139,7 @@ private fun SettingsButton(
             Text(
                 text = stringResource(text), modifier = Modifier
             )
-        }
+        },
+        subtitle = { Text(stringResource(description)) }
     )
 }

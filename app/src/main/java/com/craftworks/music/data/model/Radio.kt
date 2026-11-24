@@ -13,7 +13,7 @@ fun MediaData.Radio.toMediaItem(): MediaItem {
             .setStation(this@toMediaItem.name)
             .setArtist(this@toMediaItem.name)
             .setArtworkUri(
-                ("android.resource://com.craftworks.music/" + R.drawable.radioplaceholder).toUri()
+                ("android.resource://${com.craftworks.music.updates.MusicUpdateRules.PACKAGE}/" + R.drawable.radioplaceholder).toUri()
             )
             .setIsPlayable(true)
             .setIsBrowsable(false)

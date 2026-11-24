@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import com.craftworks.music.ui.elements.tv.auroraBackground
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -81,7 +82,7 @@ fun SongDialog(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .drawBehind { drawRect(color = backgroundColor) }
+                .auroraBackground()
                 .padding(horizontal = 48.dp, vertical = 48.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.Top

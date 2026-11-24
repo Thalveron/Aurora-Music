@@ -67,13 +67,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component1
-import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component2
-import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component3
-import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component4
-import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component5
-import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component6
-import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component7
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -95,7 +88,6 @@ import androidx.compose.ui.unit.dp
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -118,6 +110,7 @@ import com.craftworks.music.managers.settings.AppearanceSettingsManager
 import com.craftworks.music.player.ChoraMediaLibraryService
 import com.craftworks.music.player.rememberManagedMediaController
 import com.craftworks.music.ui.elements.dialogs.tv.OnboardingDialog
+import com.craftworks.music.ui.elements.tv.AuroraBackdrop
 import com.craftworks.music.ui.playing.NowPlayingContent
 import com.craftworks.music.ui.playing.NowPlayingMiniPlayer
 import com.craftworks.music.ui.playing.dpToPx
@@ -160,10 +153,13 @@ class MainActivity : ComponentActivity() {
             val selectedThemeName by AppearanceSettingsManager(this).appTheme.collectAsState(
                 AppearanceSettingsManager.Companion.AppTheme.SYSTEM.name
             )
+            val isTvDevice = LocalConfiguration.current.uiMode and
+                    Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
             val darkTheme = when (selectedThemeName) {
                 AppearanceSettingsManager.Companion.AppTheme.DARK.name -> true
                 AppearanceSettingsManager.Companion.AppTheme.LIGHT.name -> false
-                else -> isSystemInDarkTheme()
+                // TVs rarely report a night mode, and a white screen is harsh in a living room.
+                else -> isTvDevice || isSystemInDarkTheme()
             }
 
             MusicPlayerTheme (darkTheme) {
@@ -223,11 +219,13 @@ class MainActivity : ComponentActivity() {
                     // Set background color to colorScheme.background
                     window.decorView.setBackgroundColor(androidx.tv.material3.MaterialTheme.colorScheme.background.toArgb())
 
-                    SetupNavGraph(
-                        navController = navController,
-                        bottomPadding = 0.dp,
-                        mediaController = mediaController
-                    )
+                    AuroraBackdrop {
+                        SetupNavGraph(
+                            navController = navController,
+                            bottomPadding = 0.dp,
+                            mediaController = mediaController
+                        )
+                    }
                 } else {
                     // Set background color to colorScheme.background
                     window.decorView.setBackgroundColor(MaterialTheme.colorScheme.background.toArgb())
@@ -331,13 +329,11 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                var showNoProvidersDialog by rememberSaveable { mutableStateOf(false) }
-
-                LaunchedEffect(Unit) {
-                    val folders = LocalProviderManager.getAllFolders()
-                    val servers = NavidromeManager.getAllServers()
-
-                    showNoProvidersDialog = !(folders.isEmpty() && servers.isEmpty())
+                var showNoProvidersDialog by rememberSaveable {
+                    mutableStateOf(
+                        LocalProviderManager.getAllFolders().isNotEmpty() ||
+                                NavidromeManager.getAllServers().isNotEmpty()
+                    )
                 }
 
                 if (!showNoProvidersDialog) {
@@ -420,9 +416,7 @@ fun TvSideNavigation(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val context = LocalContext.current
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-
-    val (home, albums, songs, artists, radios, playlists, settings) = remember { FocusRequester.createRefs() }
-    val currentRoute by navController.currentBackStackEntryFlow.collectAsStateWithLifecycle(initialValue = null)
+    val currentRoute = backStackEntry?.destination?.route
 
     val orderedNavItems = AppearanceSettingsManager(context).bottomNavItemsFlow.collectAsState(
         initial = listOf(
@@ -447,6 +441,32 @@ fun TvSideNavigation(
         )
     ).value
 
+    var isPlayingVisible by remember { mutableStateOf(mediaController?.currentMediaItem != null) }
+    LaunchedEffect(mediaController?.mediaMetadata) {
+        isPlayingVisible = mediaController?.currentMediaItem != null
+    }
+
+    // One requester per destination, so entering the drawer lands on the current page.
+    val requesters = remember { mutableMapOf<String, FocusRequester>() }
+    fun requesterFor(route: String) = requesters.getOrPut(route) { FocusRequester() }
+    val shownRoutes = buildList {
+        add(Screen.Search.route)
+        orderedNavItems.filter { it.enabled }.forEach { add(it.screenRoute) }
+        if (isPlayingVisible) add(Screen.NowPlayingLandscape.route)
+        add(Screen.Setting.route)
+    }
+
+    fun open(route: String) {
+        if (route == currentRoute) return
+        navController.navigate(route) {
+            launchSingleTop = true
+            restoreState = true
+            popUpTo(navController.graph.startDestinationId) {
+                saveState = true
+            }
+        }
+    }
+
     NavigationDrawer(
         modifier = Modifier.fillMaxSize(),
         drawerState = drawerState,
@@ -457,35 +477,21 @@ fun TvSideNavigation(
                     .padding(vertical = 24.dp)
                     .focusProperties {
                         enter = {
-                            when (currentRoute) {
-                                Screen.Home -> home
-                                Screen.Albums -> albums
-                                Screen.Song -> songs
-                                Screen.Artists -> artists
-                                Screen.Radio -> radios
-                                Screen.Playlists -> playlists
-                                Screen.Setting -> settings
-                                else -> FocusRequester.Default
-                            }
+                            if (currentRoute != null && currentRoute in shownRoutes)
+                                requesterFor(currentRoute)
+                            else
+                                FocusRequester.Default
                         }
                     }
                     .focusGroup(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 NavigationDrawerItem(
-                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
-                    selected = Screen.Search.route == backStackEntry?.destination?.route,
-                    onClick = {
-                        if (Screen.Search.route != backStackEntry?.destination?.route) {
-                            navController.navigate(Screen.Search.route) {
-                                launchSingleTop = true
-                                restoreState = true
-                                popUpTo(navController.graph.startDestinationId) {
-                                    saveState = true
-                                }
-                            }
-                        }
-                    },
+                    modifier = Modifier
+                        .padding(vertical = 4.dp, horizontal = 8.dp)
+                        .focusRequester(requesterFor(Screen.Search.route)),
+                    selected = Screen.Search.route == currentRoute,
+                    onClick = { open(Screen.Search.route) },
                     leadingContent = {
                         androidx.tv.material3.Icon(
                             imageVector = Icons.Rounded.Search,
@@ -494,92 +500,56 @@ fun TvSideNavigation(
                         )
                     }
                 ) {
-                    androidx.tv.material3.Text(text = "搜索")
+                    androidx.tv.material3.Text(text = stringResource(R.string.Action_Search))
                 }
 
                 orderedNavItems.forEach { item ->
                     if (!item.enabled) return@forEach
 
-                    val isSelected = item.screenRoute == backStackEntry?.destination?.route
                     val icon = when (item.screenRoute) {
                         "home_screen"    -> R.drawable.rounded_home_24
                         "album_screen"   -> R.drawable.rounded_library_music_24
                         "songs_screen"   -> R.drawable.round_music_note_24
                         "artists_screen" -> R.drawable.rounded_artist_24
                         "radio_screen"   -> R.drawable.rounded_radio
-                        "playlist_screen"-> R.drawable.placeholder
+                        "playlist_screen"-> R.drawable.rounded_queue_music_24
                         else             -> R.drawable.placeholder
                     }
                     NavigationDrawerItem(
                         modifier = Modifier
                             .padding(vertical = 4.dp, horizontal = 8.dp)
-                            .focusRequester(
-                                when (item.screenRoute) {
-                                    Screen.Home.route -> home
-                                    Screen.Albums.route -> albums
-                                    Screen.Song.route -> songs
-                                    Screen.Artists.route -> artists
-                                    Screen.Radio.route -> radios
-                                    Screen.Playlists.route -> playlists
-                                    Screen.Setting.route -> settings
-                                    else -> FocusRequester.Default
-                                }
-                            ),
-                        selected = isSelected,
-                        onClick = {
-                            if (!isSelected) {
-                                navController.navigate(item.screenRoute) {
-                                    launchSingleTop = true
-                                    restoreState = true
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
-                                    }
-                                }
-                            }
-                        },
+                            .focusRequester(requesterFor(item.screenRoute)),
+                        selected = item.screenRoute == currentRoute,
+                        onClick = { open(item.screenRoute) },
                         leadingContent = {
                             androidx.tv.material3.Icon(
                                 imageVector = ImageVector.vectorResource(icon),
-                                contentDescription = item.title,
+                                contentDescription = null,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
                     ) {
-                        androidx.tv.material3.Text(text = when(item.screenRoute) {
-                            "home_screen" -> "首页"
-                            "album_screen" -> "专辑"
-                            "songs_screen" -> "歌曲"
-                            "artists_screen" -> "歌手"
-                            "radio_screen" -> "电台"
-                            "playlist_screen" -> "歌单"
-                            else -> item.title
-                        })
+                        androidx.tv.material3.Text(
+                            text = when (item.screenRoute) {
+                                "home_screen" -> stringResource(R.string.Tv_Home)
+                                "album_screen" -> stringResource(R.string.Albums)
+                                "songs_screen" -> stringResource(R.string.songs)
+                                "artists_screen" -> stringResource(R.string.Artists)
+                                "radio_screen" -> stringResource(R.string.radios)
+                                "playlist_screen" -> stringResource(R.string.playlists)
+                                else -> item.title
+                            }
+                        )
                     }
-                }
-
-                val isPlayingSelected =
-                    Screen.NowPlayingLandscape.route == backStackEntry?.destination?.route
-
-                var isPlayingVisible by remember { mutableStateOf(mediaController?.currentMediaItem != null) }
-                LaunchedEffect(mediaController?.mediaMetadata) {
-                    isPlayingVisible = mediaController?.currentMediaItem != null
                 }
 
                 if (isPlayingVisible) {
                     NavigationDrawerItem(
-                        modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
-                        selected = isPlayingSelected,
-                        onClick = {
-                            if (!isPlayingSelected) {
-                                navController.navigate(Screen.NowPlayingLandscape.route) {
-                                    launchSingleTop = true
-                                    restoreState = true
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
-                                    }
-                                }
-                            }
-                        },
+                        modifier = Modifier
+                            .padding(vertical = 4.dp, horizontal = 8.dp)
+                            .focusRequester(requesterFor(Screen.NowPlayingLandscape.route)),
+                        selected = Screen.NowPlayingLandscape.route == currentRoute,
+                        onClick = { open(Screen.NowPlayingLandscape.route) },
                         leadingContent = {
                             androidx.tv.material3.Icon(
                                 imageVector = ImageVector.vectorResource(R.drawable.s_m_playback),
@@ -588,7 +558,7 @@ fun TvSideNavigation(
                             )
                         }
                     ) {
-                        androidx.tv.material3.Text(text = "Playing")
+                        androidx.tv.material3.Text(text = stringResource(R.string.Tv_Now_Playing))
                     }
                 }
 
@@ -599,18 +569,11 @@ fun TvSideNavigation(
                     verticalArrangement = Arrangement.Bottom
                 ) {
                     NavigationDrawerItem(
-                        modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
-                        selected = Screen.Setting.route == backStackEntry?.destination?.route,
-                        onClick = {
-                            if (Screen.Setting.route != backStackEntry?.destination?.route)
-                                navController.navigate(Screen.Setting.route) {
-                                    launchSingleTop = true
-                                    restoreState = true
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
-                                    }
-                                }
-                        },
+                        modifier = Modifier
+                            .padding(vertical = 4.dp, horizontal = 8.dp)
+                            .focusRequester(requesterFor(Screen.Setting.route)),
+                        selected = Screen.Setting.route == currentRoute,
+                        onClick = { open(Screen.Setting.route) },
                         leadingContent = {
                             androidx.tv.material3.Icon(
                                 imageVector = ImageVector.vectorResource(R.drawable.rounded_settings_24),
@@ -621,29 +584,6 @@ fun TvSideNavigation(
                     ) {
                         androidx.tv.material3.Text(text = stringResource(R.string.settings))
                     }
-                    /*
-                    NavigationDrawerItem(
-                        modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
-                        selected = false,
-                        onClick = {
-                            (context as Activity).finish()
-                            exitProcess(0)
-                        },
-                        leadingContent = {
-                            androidx.tv.material3.Icon(
-                                imageVector = ImageVector.vectorResource(R.drawable.round_power_settings_new_24),
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        },
-                        colors = NavigationDrawerItemDefaults.colors(
-                            focusedContainerColor = androidx.tv.material3.MaterialTheme.colorScheme.errorContainer,
-                            focusedContentColor = androidx.tv.material3.MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    ) {
-                        androidx.tv.material3.Text(text = stringResource(R.string.Action_Exit))
-                    }
-                    */
                 }
             }
         },

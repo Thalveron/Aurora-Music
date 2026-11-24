@@ -87,7 +87,7 @@ class LocalProvider @Inject constructor(
                         context.contentResolver.openInputStream(uri)?.close()
                         uri
                     } catch (e: Exception) {
-                        "android.resource://com.craftworks.music/${R.drawable.albumplaceholder}".toUri()
+                        "android.resource://${com.craftworks.music.updates.MusicUpdateRules.PACKAGE}/${R.drawable.albumplaceholder}".toUri()
                     }
                 }
 
@@ -186,7 +186,7 @@ class LocalProvider @Inject constructor(
                         context.contentResolver.openInputStream(uri)?.close()
                         uri
                     } catch (e: Exception) {
-                        "android.resource://com.craftworks.music/${R.drawable.albumplaceholder}".toUri()
+                        "android.resource://${com.craftworks.music.updates.MusicUpdateRules.PACKAGE}/${R.drawable.albumplaceholder}".toUri()
                     }
                 }
 
@@ -294,7 +294,7 @@ class LocalProvider @Inject constructor(
                         context.contentResolver.openInputStream(uri)?.close()
                         uri
                     } catch (e: Exception) {
-                        "android.resource://com.craftworks.music/${R.drawable.albumplaceholder}".toUri()
+                        "android.resource://${com.craftworks.music.updates.MusicUpdateRules.PACKAGE}/${R.drawable.albumplaceholder}".toUri()
                     }
                 }
 
@@ -405,7 +405,7 @@ class LocalProvider @Inject constructor(
                         context.contentResolver.openInputStream(uri)?.close()
                         uri
                     } catch (e: Exception) {
-                        "android.resource://com.craftworks.music/${R.drawable.albumplaceholder}".toUri()
+                        "android.resource://${com.craftworks.music.updates.MusicUpdateRules.PACKAGE}/${R.drawable.albumplaceholder}".toUri()
                     }
                 }
 

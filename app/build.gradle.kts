@@ -18,12 +18,25 @@ android {
         applicationId = "com.craftworks.music.tvcustom"
         minSdk = 23
         targetSdk = 37
-        versionCode = 316
-        versionName = "1.32.0"
+        versionCode = 317
+        versionName = "1.33.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+    }
+
+    // The release key is supplied by the environment and is never stored in the repository.
+    val releaseKeystore = System.getenv("AURORA_KEYSTORE_FILE")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("AURORA_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("AURORA_KEY_ALIAS")
+                keyPassword = System.getenv("AURORA_KEY_PASSWORD")
+            }
         }
     }
 
@@ -35,7 +48,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
         }
         debug {
             isDebuggable = false

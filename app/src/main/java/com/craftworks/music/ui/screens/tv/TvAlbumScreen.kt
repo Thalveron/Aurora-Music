@@ -1,5 +1,6 @@
 package com.craftworks.music.ui.screens.tv
 
+import com.craftworks.music.ui.elements.tv.TvScreenTitle
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -110,6 +111,9 @@ fun TvAlbumScreen(
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(20.dp),
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(24.dp),
     ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            TvScreenTitle(title = stringResource(R.string.Albums))
+        }
         item(span = { GridItemSpan(5) }) {
             TabRow(
                 selectedTabIndex = selectedTabIndex,
