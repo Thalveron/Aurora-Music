@@ -18,8 +18,8 @@ android {
         applicationId = "com.craftworks.music.tvcustom"
         minSdk = 23
         targetSdk = 37
-        versionCode = 316
-        versionName = "1.32.0"
+        versionCode = 317
+        versionName = "1.34.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

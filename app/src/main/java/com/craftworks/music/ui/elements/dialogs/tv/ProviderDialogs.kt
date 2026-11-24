@@ -309,12 +309,14 @@ fun CreateNavidromeProviderDialog(
                     }
                 }
             }
+
+            // Inside the dialog's own composition, so the field exists when focus is requested.
+            LaunchedEffect(Unit) {
+                runCatching { urlFocus.requestFocus() }
+            }
         }
     }
 
-    LaunchedEffect(Unit) {
-        runCatching { urlFocus.requestFocus() }
-    }
 }
 
 @Composable

@@ -28,6 +28,39 @@ jobs:
         run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: unsigned-channel-apk
+          name: release-apk
           path: app/build/outputs/apk/release/*.apk
+          retention-days: 7
+
+  # Informational: runs the APK on an Android TV emulator and keeps screenshots of each step.
+  tv-smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-apk
+          path: apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: android-tv
+          arch: x86
+          profile: tv_1080p
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash tools/tv_smoke.sh apk/*.apk tv-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tv-smoke
+          path: tv-smoke
           retention-days: 7
