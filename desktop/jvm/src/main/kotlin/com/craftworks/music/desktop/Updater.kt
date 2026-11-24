@@ -56,7 +56,9 @@ internal fun saveVerifiedUpdate(body: InputStream, asset: ReleaseAsset, director
         val digest = "sha256:" + hash.digest().joinToString("") { "%02x".format(it) }
         if (count != asset.size || digest != asset.digest) throw IOException("Update integrity verification failed")
         val destination = directory.resolve(asset.name)
-        Files.createLink(destination, temp)
+        // Both paths are in the chosen directory; moving also works on exFAT
+        // removable drives, where making a hard link is not supported.
+        Files.move(temp, destination)
         return destination
     } finally {
         Files.deleteIfExists(temp)
@@ -99,13 +101,19 @@ internal class Updater {
         .followRedirects(HttpClient.Redirect.NEVER).build()
 
     fun check(): Update? {
-        val response = send(URI("https://api.github.com/repos/$REPOSITORY/releases?per_page=30"))
-        response.body().use { body ->
-            if (response.statusCode() != 200) throw IOException("GitHub update metadata returned HTTP ${response.statusCode()}")
-            val bytes = body.readNBytes(4 * 1024 * 1024 + 1)
-            if (bytes.size > 4 * 1024 * 1024) throw IOException("Update metadata is too large")
-            return selectUpdate(bytes.toString(Charsets.UTF_8), "1.33.0")
-        }
+        var best: Update? = null
+        var page = 1
+        do {
+            val response = send(URI("https://api.github.com/repos/$REPOSITORY/releases?per_page=30&page=$page"))
+            response.body().use { body ->
+                if (response.statusCode() != 200) throw IOException("GitHub update metadata returned HTTP ${response.statusCode()}")
+                val bytes = body.readNBytes(4 * 1024 * 1024 + 1)
+                if (bytes.size > 4 * 1024 * 1024) throw IOException("Update metadata is too large")
+                selectUpdate(bytes.toString(Charsets.UTF_8), best?.version ?: "1.33.0")?.let { best = it }
+            }
+            page++
+        } while (response.headers().allValues("Link").any { "rel=\"next\"" in it })
+        return best
     }
 
     fun download(update: Update, accelerated: Boolean, directory: Path): Path {

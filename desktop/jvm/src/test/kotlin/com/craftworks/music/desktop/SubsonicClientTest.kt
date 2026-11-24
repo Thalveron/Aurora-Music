@@ -35,7 +35,7 @@ class SubsonicClientTest {
         }
         server.start()
         try {
-            val client = SubsonicClient("http://127.0.0.1:${server.address.port}/music/", "tester", "test-password", allowHttp = true)
+            val client = SubsonicClient("http://127.0.0.1:${server.address.port}/music/rest/", "tester", "test-password", allowHttp = true)
             client.ping()
             assertEquals("s1", client.search("hello & music").song!!.single().navidromeID)
             assertEquals(listOf("/music/rest/ping.view", "/music/rest/search3.view"), requests)
@@ -51,6 +51,7 @@ class SubsonicClientTest {
             "https://user:password@example.test",
             "https://example.test/?token=private",
             "ftp://example.test",
+            "https://bad host.test",
         )
         invalid.forEach { address ->
             val error = runCatching { SubsonicClient(address, "tester", "test-password") }.exceptionOrNull()

@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toArgb
@@ -71,6 +72,9 @@ private fun DesktopApp(exit: () -> Unit) {
     var address by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var profiles by remember { mutableStateOf(emptyList<SavedServer>()) }
+    var selectedProfile by remember { mutableStateOf<SavedServer?>(null) }
+    var profileMenu by remember { mutableStateOf(false) }
     var allowHttp by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var appliedQuery by remember { mutableStateOf("") }
@@ -81,20 +85,39 @@ private fun DesktopApp(exit: () -> Unit) {
     var hasMoreAlbums by remember { mutableStateOf(false) }
     var playlists by remember { mutableStateOf<List<MediaData.Playlist>>(emptyList()) }
     var libraryTab by remember { mutableStateOf("songs") }
-    var current by remember { mutableStateOf<MediaData.Song?>(null) }
+    var queue by remember { mutableStateOf(PlayQueue<QueueTrack>()) }
+    val current = queue.current
+    var repeat by remember { mutableStateOf(RepeatMode.OFF) }
+    var timerDeadline by remember { mutableStateOf<Long?>(null) }
+    var timerMinutes by remember { mutableStateOf<Int?>(null) }
     var lyrics by remember { mutableStateOf<List<Lyric>>(emptyList()) }
     var lyricError by remember { mutableStateOf("") }
     var playback by remember { mutableStateOf(PlaybackState()) }
     var message by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var localLibrary by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf(settings.overlay) }
     var lyricColor by remember { mutableStateOf(Color(settings.lyricColor)) }
     var background by remember { mutableStateOf<ImageBitmap?>(null) }
-    var volume by remember { mutableStateOf(1f) }
     var update by remember { mutableStateOf<Update?>(null) }
-    var accelerated by remember { mutableStateOf(false) }
+    var accelerated by remember { mutableStateOf(settings.accelerated) }
+    var scrobblePercent by remember { mutableStateOf(settings.scrobblePercent) }
+    var maxBitRate by remember { mutableStateOf(settings.maxBitRate) }
+    var songForPlaylist by remember { mutableStateOf<MediaData.Song?>(null) }
+    var pendingDelete by remember { mutableStateOf<MediaData.Playlist?>(null) }
+    var pendingRename by remember { mutableStateOf<MediaData.Playlist?>(null) }
+    var songListOwner by remember { mutableStateOf<String?>(null) }
+    var albumSort by remember { mutableStateOf("alphabeticalByName") }
+    var albumSortMenu by remember { mutableStateOf(false) }
+    var musicFolder by remember { mutableStateOf<com.craftworks.music.data.NavidromeLibrary?>(null) }
+    var folderOptions by remember { mutableStateOf<List<com.craftworks.music.data.NavidromeLibrary>?>(null) }
+    var playSession by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
+    val appIcon = remember {
+        val bytes = checkNotNull(DesktopSettings::class.java.getResourceAsStream("/branding/aurora-music.png")).use { it.readBytes() }
+        BitmapPainter(org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap())
+    }
     val player = remember { AudioPlayer { playback = it } }
     DisposableEffect(player) { onDispose { player.close() } }
 
@@ -109,22 +132,53 @@ private fun DesktopApp(exit: () -> Unit) {
         }
     }
 
-    fun playSong(song: MediaData.Song) {
+    fun playIndex(index: Int) {
+        val track = queue.entries.getOrNull(index) ?: return
+        queue = queue.copy(index = index)
+        playSession++
+        track.play()
+    }
+
+    fun serverTrack(active: SubsonicClient, song: MediaData.Song) =
+        QueueTrack(song, { player.play(active, song, maxBitRate) }, { loadLyrics(active, song) }, { active.scrobble(song.navidromeID, it) })
+
+    fun disconnect() {
+        player.stop()
+        queue = PlayQueue()
+        client = null
+        songs = emptyList()
+        albums = emptyList()
+        playlists = emptyList()
+        songListOwner = null
+        musicFolder = null
+        folderOptions = null
+        query = ""
+        appliedQuery = ""
+        hasMore = false
+        hasMoreAlbums = false
+        libraryTab = "songs"
+        timerDeadline = null
+        message = ""
+    }
+
+    fun playSongs(tracks: List<MediaData.Song>, index: Int) {
         val active = client ?: return
-        if (song.navidromeID.isBlank()) {
+        if (index !in tracks.indices || tracks.any { it.navidromeID.isBlank() }) {
             message = label("服务器返回的歌曲 ID 无效", "The server returned an invalid song ID")
             return
         }
-        current = song
-        player.play(active, song)
+        queue = PlayQueue(tracks.map { serverTrack(active, it) }, index)
+        playIndex(index)
     }
 
     LaunchedEffect(Unit) {
         try {
+            profiles = withContext(Dispatchers.IO) { settings.servers() }
             val saved = withContext(Dispatchers.IO) {
                 settings.server()?.let { it to settings.password(it) }
             }
             if (saved != null) {
+                selectedProfile = saved.first
                 address = saved.first.address
                 username = saved.first.username
                 allowHttp = saved.first.allowHttp
@@ -142,14 +196,13 @@ private fun DesktopApp(exit: () -> Unit) {
         }
     }
 
-    LaunchedEffect(current, client) {
+    LaunchedEffect(current) {
         lyrics = emptyList()
         lyricError = ""
         val selected = current
-        val active = client
-        if (selected != null && active != null) {
+        if (selected != null) {
             try {
-                lyrics = withContext(Dispatchers.IO) { loadLyrics(active, selected) }
+                lyrics = withContext(Dispatchers.IO) { selected.readLyrics() }
             } catch (e: IOException) {
                 lyricError = label("歌词加载失败", "Could not load lyrics") + ": " + describeError(e, chinese)
             }
@@ -157,21 +210,96 @@ private fun DesktopApp(exit: () -> Unit) {
     }
 
     LaunchedEffect(playback.ended) {
-        if (playback.ended) {
-            val index = songs.indexOfFirst { it.navidromeID == current?.navidromeID }
-            val next = songs.getOrNull(index + 1).takeIf { index >= 0 }
-            if (next != null) playSong(next)
+        if (playback.ended) queue.next(repeat, automatic = true)?.let(::playIndex)
+    }
+    LaunchedEffect(timerDeadline) {
+        val deadline = timerDeadline
+        if (deadline == null) timerMinutes = null else {
+            while (true) {
+                val remaining = (deadline - System.nanoTime()) / 1_000_000L
+                if (remaining <= 0) break
+                timerMinutes = ((remaining + 59_999) / 60_000).toInt()
+                kotlinx.coroutines.delay(minOf(remaining, 1000))
+            }
+            player.pause()
+            timerDeadline = null
         }
     }
 
     val lyricText = currentLyric(lyrics, playback.positionMs)
+    LaunchedEffect(current, playSession, scrobblePercent) {
+        val report = queue.current?.reportPlay
+        if (report != null && scrobblePercent > 0) {
+            var announced = false
+            var listened = 0L
+            var previous = System.nanoTime()
+            while (true) {
+                kotlinx.coroutines.delay(500)
+                val now = System.nanoTime()
+                if (playback.error || playback.ended) break
+                if (playback.playing) {
+                    listened += (now - previous) / 1_000_000
+                    val submit = playback.durationMs > 0 && listened >= playback.durationMs * scrobblePercent / 100
+                    if (!announced || submit) {
+                        try { withContext(Dispatchers.IO) { report(submit) } }
+                        catch (e: IOException) { message = describeError(e, chinese); break }
+                        if (submit) break
+                        announced = true
+                    }
+                }
+                previous = System.nanoTime()
+            }
+        }
+    }
     Window(
         onCloseRequest = exit,
-        title = "Aurora Music 1.33.0 - development",
+        title = "Aurora Music",
+        icon = appIcon,
         state = WindowState(width = 1120.dp, height = 760.dp),
     ) {
         MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xffaeb9ff), surface = Color(0xff202432))) {
-            Box(Modifier.fillMaxSize().background(Color(0xff10131d))) {
+            val activeServer = client
+            if (activeServer != null) {
+                songForPlaylist?.let { AddSongDialog(activeServer, it, chinese) { songForPlaylist = null } }
+                pendingRename?.let { playlist ->
+                    var title by remember(playlist) { mutableStateOf(playlist.name) }
+                    androidx.compose.material3.AlertDialog(onDismissRequest = { pendingRename = null },
+                        title = { Text(label("重命名歌单", "Rename playlist")) },
+                        text = { OutlinedTextField(title, { title = it }, singleLine = true) },
+                        dismissButton = { TextButton({ pendingRename = null }) { Text(label("取消", "Cancel")) } },
+                        confirmButton = { TextButton(enabled = title.isNotBlank(), onClick = {
+                            pendingRename = null
+                            busy = true
+                            scope.launch {
+                                try {
+                                    playlists = withContext(Dispatchers.IO) {
+                                        activeServer.renamePlaylist(playlist.navidromeID, title)
+                                        activeServer.playlists()
+                                    }
+                                } catch (e: IOException) { message = describeError(e, chinese) }
+                                finally { busy = false }
+                            }
+                        }) { Text(label("保存", "Save")) } })
+                }
+                pendingDelete?.let { playlist ->
+                    androidx.compose.material3.AlertDialog(onDismissRequest = { pendingDelete = null },
+                        title = { Text(label("从服务器删除歌单？", "Delete playlist from server?")) }, text = { Text(playlist.name) },
+                        dismissButton = { TextButton({ pendingDelete = null }) { Text(label("取消", "Cancel")) } },
+                        confirmButton = { TextButton({
+                            pendingDelete = null
+                            busy = true
+                            scope.launch {
+                                try {
+                                    withContext(Dispatchers.IO) { activeServer.deletePlaylist(playlist.navidromeID) }
+                                    playlists = playlists.filterNot { it.navidromeID == playlist.navidromeID }
+                                } catch (e: IOException) { message = describeError(e, chinese) }
+                                finally { busy = false }
+                            }
+                        }) { Text(label("删除", "Delete")) } })
+                }
+            }
+            Surface(Modifier.fillMaxSize(), color = Color(0xff10131d), contentColor = Color(0xffeef0fa)) {
+              Box(Modifier.fillMaxSize()) {
                 background?.let {
                     Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.66f)))
@@ -179,10 +307,12 @@ private fun DesktopApp(exit: () -> Unit) {
                 Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     Surface(shape = RoundedCornerShape(20.dp), color = Color(0xff202534).copy(alpha = 0.93f), modifier = Modifier.width(190.dp)) {
                         Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("AURORA", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+                            Image(appIcon, null, Modifier.height(52.dp))
+                            Text("Aurora Music", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                             Text(label("你的音乐空间", "Your music space"), style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.height(20.dp))
-                            TextButton(enabled = !busy, onClick = { showSettings = false }) { Text(label("音乐库", "Library")) }
+                            TextButton(enabled = !busy, onClick = { showSettings = false; localLibrary = false }) { Text(label("服务器音乐库", "Server library")) }
+                            TextButton(enabled = !busy, onClick = { showSettings = false; localLibrary = true }) { Text(label("本地音乐", "Local music")) }
                             TextButton(enabled = !busy, onClick = { showSettings = true }) { Text(label("设置", "Settings")) }
                             Spacer(Modifier.weight(1f))
                             Text("1.33.0 • dev", style = MaterialTheme.typography.labelSmall)
@@ -190,7 +320,7 @@ private fun DesktopApp(exit: () -> Unit) {
                     }
                     Column(Modifier.weight(1f).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (showSettings) label("设置", "Settings") else label("发现音乐", "Discover music"), style = MaterialTheme.typography.headlineMedium)
+                            Text(if (showSettings) label("设置", "Settings") else if (localLibrary) label("本地音乐", "Local music") else label("服务器音乐库", "Server library"), style = MaterialTheme.typography.headlineMedium)
                             TextButton(onClick = { chinese = !chinese; saveAppearance() }) { Text(if (chinese) "English" else "中文") }
                         }
                         if (showSettings) {
@@ -229,13 +359,30 @@ private fun DesktopApp(exit: () -> Unit) {
                             }
                             Text(label("背景文件保留在本机；服务器密码仅在 Windows 上使用系统加密保存。", "Backgrounds stay on this device. Passwords are saved using Windows encryption."), style = MaterialTheme.typography.bodyMedium)
                             Text(label("FLAC、OGG、Opus 等格式将请求服务器转码为 MP3。", "FLAC, OGG, Opus and similar formats request MP3 transcoding from the server."), style = MaterialTheme.typography.bodySmall)
-                            TextButton(enabled = !busy, onClick = {
+                            Text(label("服务器播放音质（下首生效）", "Streaming quality (next track)"))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                for (rate in listOf(0, 128, 192, 320)) androidx.compose.material3.FilterChip(
+                                    selected = maxBitRate == rate, onClick = {
+                                        maxBitRate = rate
+                                        try { settings.maxBitRate = rate; settings.flush() }
+                                        catch (e: IOException) { message = describeError(e, chinese) }
+                                    }, label = { Text(if (rate == 0) label("自动", "Auto") else "$rate kbps") })
+                            }
+                            Text(label("向音乐服务器记录播放", "Report listening history to your music server"))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                for (threshold in listOf(0, 50, 70, 90)) androidx.compose.material3.FilterChip(
+                                    selected = scrobblePercent == threshold, onClick = {
+                                        scrobblePercent = threshold
+                                        try { settings.scrobblePercent = threshold; settings.flush() }
+                                        catch (e: IOException) { message = describeError(e, chinese) }
+                                    }, label = { Text(if (threshold == 0) label("关闭", "Off") else "$threshold%") })
+                            }
+                            TextButton(enabled = !busy && selectedProfile != null, onClick = {
                                 try {
-                                    settings.removeServer()
-                                    player.stop()
-                                    client = null
-                                    current = null
-                                    songs = emptyList()
+                                    settings.removeServer(selectedProfile)
+                                    profiles = settings.servers()
+                                    selectedProfile = null
+                                    disconnect()
                                     address = ""
                                     username = ""
                                     password = ""
@@ -248,8 +395,13 @@ private fun DesktopApp(exit: () -> Unit) {
                             Text(label("Windows 更新", "Windows updates"), style = MaterialTheme.typography.titleLarge)
                             Text(label("更新信息来自 GitHub；加速线路会向第三方发送公开下载地址。下载后需自行安装。", "Metadata comes from GitHub. The acceleration provider receives the public download URL. Install downloads manually."), style = MaterialTheme.typography.bodyMedium)
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(accelerated, onCheckedChange = { accelerated = it })
-                                Text(label("使用加速线路", "Use accelerated route"))
+                                listOf(false to label("GitHub 原始线路", "GitHub direct"), true to label("加速线路", "Accelerated")).forEach { (route, text) ->
+                                    androidx.compose.material3.FilterChip(selected = accelerated == route, enabled = !busy, onClick = {
+                                        accelerated = route
+                                        try { settings.accelerated = route; settings.flush() }
+                                        catch (e: IOException) { message = describeError(e, chinese) }
+                                    }, label = { Text(text) }, modifier = Modifier.padding(end = 8.dp))
+                                }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(enabled = !busy, onClick = {
@@ -286,8 +438,36 @@ private fun DesktopApp(exit: () -> Unit) {
                                 }
                             }
                             }
+                        } else if (localLibrary) {
+                            LocalLibraryPanel(chinese, Modifier.weight(1f)) { selected, tracks ->
+                                val index = tracks.indexOf(selected)
+                                if (index >= 0) {
+                                    queue = PlayQueue(tracks.map { QueueTrack(it.song, { player.playLocal(it) }, { loadLocalLyrics(it) }) }, index)
+                                    playIndex(index)
+                                }
+                            }
                         } else if (client == null) {
                             Text(label("连接 Navidrome 或 Subsonic 服务器", "Connect to Navidrome or a Subsonic server"), style = MaterialTheme.typography.titleLarge)
+                            if (profiles.isNotEmpty()) Box {
+                                TextButton({ profileMenu = true }, enabled = !busy) { Text(label("选择服务器或添加账号", "Choose server or add account")) }
+                                androidx.compose.material3.DropdownMenu(profileMenu, { profileMenu = false }) {
+                                    (profiles + listOf(null)).forEach { profile ->
+                                        androidx.compose.material3.DropdownMenuItem(text = {
+                                            Text(profile?.let { "${it.username} · ${it.address}" } ?: label("添加服务器", "Add server"))
+                                        }, onClick = {
+                                            profileMenu = false
+                                            try {
+                                                val secret = profile?.let(settings::password).orEmpty()
+                                                selectedProfile = profile
+                                                address = profile?.address.orEmpty()
+                                                username = profile?.username.orEmpty()
+                                                allowHttp = profile?.allowHttp ?: false
+                                                password = secret
+                                            } catch (e: IOException) { message = describeError(e, chinese) }
+                                        })
+                                    }
+                                }
+                            }
                             OutlinedTextField(address, { address = it }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text(label("服务器地址", "Server address")) }, singleLine = true)
                             OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text(label("用户名", "Username")) }, singleLine = true)
                             OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text(label("密码", "Password")) }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
@@ -311,6 +491,8 @@ private fun DesktopApp(exit: () -> Unit) {
                                         password = ""
                                         if (Platform.isWindows()) {
                                             withContext(Dispatchers.IO) { settings.saveServer(serverAddress, serverUsername, serverPassword, httpAllowed) }
+                                            selectedProfile = settings.server()
+                                            profiles = settings.servers()
                                         } else {
                                             message = label("已连接；非 Windows 系统不保存密码", "Connected; passwords are not saved on this platform")
                                         }
@@ -333,8 +515,8 @@ private fun DesktopApp(exit: () -> Unit) {
                                     busy = true
                                     scope.launch {
                                         try {
-                                            albums = withContext(Dispatchers.IO) { active.albums() }
-                                            hasMoreAlbums = albums.size == 100
+                                            albums = withContext(Dispatchers.IO) { active.albums(albumSort, folder = musicFolder?.id) }
+                                            hasMoreAlbums = albumSort != "random" && albums.size == 100
                                             libraryTab = "albums"
                                             message = ""
                                         } catch (e: IOException) { message = describeError(e, chinese) }
@@ -353,6 +535,38 @@ private fun DesktopApp(exit: () -> Unit) {
                                         finally { busy = false }
                                     }
                                 }) { Text(label("播放列表", "Playlists")) }
+                                TextButton(enabled = !busy, onClick = { libraryTab = "explore" }) { Text(label("歌手 / 收藏 / 电台", "Artists / Favorites / Radio")) }
+                                Box {
+                                    TextButton(enabled = !busy, onClick = {
+                                        val active = client ?: return@TextButton
+                                        busy = true
+                                        scope.launch {
+                                            try { folderOptions = withContext(Dispatchers.IO) { active.musicFolders() } }
+                                            catch (e: IOException) { message = describeError(e, chinese) }
+                                            finally { busy = false }
+                                        }
+                                    }) { Text(musicFolder?.name ?: label("歌曲/专辑筛选", "Song/album filter")) }
+                                    androidx.compose.material3.DropdownMenu(folderOptions != null, { folderOptions = null }) {
+                                        (listOf(null) + folderOptions.orEmpty()).forEach { folder ->
+                                            androidx.compose.material3.DropdownMenuItem(text = { Text(folder?.name ?: label("全部文件夹", "All folders")) }, onClick = {
+                                                folderOptions = null
+                                                val active = client ?: return@DropdownMenuItem
+                                                busy = true
+                                                scope.launch {
+                                                    try {
+                                                        songs = withContext(Dispatchers.IO) { active.search(query, folder = folder?.id).song.orEmpty() }
+                                                        appliedQuery = query
+                                                        musicFolder = folder
+                                                        songListOwner = null
+                                                        hasMore = songs.size == 100
+                                                        libraryTab = "songs"
+                                                    } catch (e: IOException) { message = describeError(e, chinese) }
+                                                    finally { busy = false }
+                                                }
+                                            })
+                                        }
+                                    }
+                                }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 OutlinedTextField(query, { query = it }, Modifier.weight(1f), enabled = !busy, label = { Text(label("搜索歌曲", "Search songs")) }, singleLine = true)
@@ -363,8 +577,9 @@ private fun DesktopApp(exit: () -> Unit) {
                                     message = ""
                                     scope.launch {
                                         try {
-                                            val found = withContext(Dispatchers.IO) { active.search(searchQuery).song.orEmpty() }
+                                            val found = withContext(Dispatchers.IO) { active.search(searchQuery, folder = musicFolder?.id).song.orEmpty() }
                                             songs = found
+                                            songListOwner = null
                                             appliedQuery = searchQuery
                                             hasMore = found.size == 100
                                             libraryTab = "songs"
@@ -374,15 +589,38 @@ private fun DesktopApp(exit: () -> Unit) {
                                     }
                                 }) { Text(label("搜索", "Search")) }
                                 TextButton(enabled = !busy, onClick = {
-                                    player.stop()
-                                    current = null
-                                    client = null
-                                    songs = emptyList()
-                                    libraryTab = "songs"
-                                    message = ""
+                                    disconnect()
                                 }) { Text(label("断开", "Disconnect")) }
                             }
-                            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (libraryTab == "explore" && activeServer != null) {
+                                ServerLibraryPanel(activeServer, chinese, ::playSongs, { name, uri ->
+                                    val station = MediaData.Song(navidromeID = "", title = name)
+                                    queue = PlayQueue(listOf(QueueTrack(station, { player.playRadio(uri) }, { emptyList() })), 0)
+                                    playIndex(0)
+                                }, Modifier.weight(1f))
+                            } else LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (libraryTab == "albums") item {
+                                    Box {
+                                        val sorts = mapOf("alphabeticalByName" to label("按名称", "By name"), "recent" to label("最近播放", "Recently played"),
+                                            "newest" to label("最近添加", "Recently added"), "frequent" to label("最多播放", "Most played"), "random" to label("随机专辑", "Random albums"))
+                                        TextButton({ albumSortMenu = true }, enabled = !busy) { Text(sorts.getValue(albumSort)) }
+                                        androidx.compose.material3.DropdownMenu(albumSortMenu, { albumSortMenu = false }) {
+                                            sorts.forEach { (sort, title) -> androidx.compose.material3.DropdownMenuItem(text = { Text(title) }, onClick = {
+                                                albumSortMenu = false
+                                                val active = client ?: return@DropdownMenuItem
+                                                busy = true
+                                                scope.launch {
+                                                    try {
+                                                        albums = withContext(Dispatchers.IO) { active.albums(sort, folder = musicFolder?.id) }
+                                                        albumSort = sort
+                                                        hasMoreAlbums = albums.size == 100 && sort != "random"
+                                                    } catch (e: IOException) { message = describeError(e, chinese) }
+                                                    finally { busy = false }
+                                                }
+                                            }) }
+                                        }
+                                    }
+                                }
                                 if (libraryTab == "albums") itemsIndexed(albums) { _, album ->
                                     Surface(shape = RoundedCornerShape(12.dp), color = Color(0xff292f40).copy(alpha = 0.85f),
                                         modifier = Modifier.fillMaxWidth().clickable(enabled = !busy) {
@@ -395,6 +633,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                             scope.launch {
                                                 try {
                                                     songs = withContext(Dispatchers.IO) { active.album(album.navidromeID).songs.orEmpty() }
+                                                    songListOwner = null
                                                     hasMore = false
                                                     libraryTab = "songs"
                                                     message = ""
@@ -405,6 +644,27 @@ private fun DesktopApp(exit: () -> Unit) {
                                         Column(Modifier.padding(14.dp)) {
                                             Text(album.name?.takeIf { it.isNotBlank() } ?: album.title.orEmpty())
                                             Text(album.artist, style = MaterialTheme.typography.bodySmall)
+                                            TextButton(enabled = !busy && album.navidromeID.isNotBlank(), onClick = {
+                                                val active = client ?: return@TextButton
+                                                val chooser = JFileChooser().apply { fileSelectionMode = JFileChooser.DIRECTORIES_ONLY }
+                                                if (chooser.showSaveDialog(window) != JFileChooser.APPROVE_OPTION) return@TextButton
+                                                val directory = chooser.selectedFile.toPath()
+                                                busy = true
+                                                scope.launch {
+                                                    var saved = 0
+                                                    try {
+                                                        val tracks = withContext(Dispatchers.IO) { active.album(album.navidromeID).songs.orEmpty() }
+                                                        for (track in tracks) {
+                                                            message = label("正在下载", "Downloading") + " ${saved + 1}/${tracks.size}: ${track.title}"
+                                                            withContext(Dispatchers.IO) { active.downloadSong(track, directory) }
+                                                            saved++
+                                                        }
+                                                        message = label("已保存 $saved 首歌曲", "Saved $saved tracks")
+                                                    } catch (e: IOException) {
+                                                        message = label("已保存 $saved 首，下载停止：", "Saved $saved tracks; download stopped: ") + describeError(e, chinese)
+                                                    } finally { busy = false }
+                                                }
+                                            }) { Text(label("下载整张专辑", "Download album")) }
                                         }
                                     }
                                 }
@@ -415,7 +675,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                         busy = true
                                         scope.launch {
                                             try {
-                                                val found = withContext(Dispatchers.IO) { active.albums(offset = offset) }
+                                                val found = withContext(Dispatchers.IO) { active.albums(albumSort, offset = offset, folder = musicFolder?.id) }
                                                 albums = albums + found
                                                 hasMoreAlbums = found.size == 100
                                             } catch (e: IOException) {
@@ -436,18 +696,25 @@ private fun DesktopApp(exit: () -> Unit) {
                                             scope.launch {
                                                 try {
                                                     songs = withContext(Dispatchers.IO) { active.playlist(playlist.navidromeID).songs.orEmpty().toList() }
+                                                    songListOwner = playlist.navidromeID
                                                     hasMore = false
                                                     libraryTab = "songs"
                                                     message = ""
                                                 } catch (e: IOException) { message = describeError(e, chinese) }
                                                 finally { busy = false }
                                             }
-                                        }) { Text(playlist.name, Modifier.padding(14.dp)) }
+                                        }) {
+                                        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text(playlist.name, Modifier.weight(1f).padding(6.dp))
+                                            TextButton({ pendingRename = playlist }, enabled = !busy) { Text(label("重命名", "Rename")) }
+                                            TextButton({ pendingDelete = playlist }, enabled = !busy) { Text(label("删除", "Delete")) }
+                                        }
+                                    }
                                 }
                                 if (libraryTab == "songs") itemsIndexed(songs) { index, song ->
                                     Surface(shape = RoundedCornerShape(12.dp), color = Color(0xff292f40).copy(alpha = 0.85f),
                                         modifier = Modifier.fillMaxWidth().clickable {
-                                            playSong(song)
+                                            playSongs(songs, index)
                                         }) {
                                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                             Text("${index + 1}", Modifier.width(40.dp), color = MaterialTheme.colorScheme.primary)
@@ -455,7 +722,54 @@ private fun DesktopApp(exit: () -> Unit) {
                                                 Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                 Text(song.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1)
                                             }
-                                            Text(song.album, maxLines = 1, style = MaterialTheme.typography.bodySmall)
+                                            TextButton(onClick = {
+                                                val active = client ?: return@TextButton
+                                                if (song.navidromeID.isBlank()) {
+                                                    message = label("无效的歌曲 ID", "Invalid song ID")
+                                                } else if (queue.entries.isEmpty()) playSongs(listOf(song), 0)
+                                                else queue = queue.copy(entries = queue.entries + serverTrack(active, song))
+                                            }) { Text(label("加入队列", "Queue +")) }
+                                            var more by remember(song.navidromeID) { mutableStateOf(false) }
+                                            Box {
+                                                TextButton({ more = true }, enabled = !busy) { Text(label("更多", "More")) }
+                                                androidx.compose.material3.DropdownMenu(more, { more = false }) {
+                                                    songListOwner?.let { playlistId ->
+                                                        androidx.compose.material3.DropdownMenuItem(text = { Text(label("从此歌单移除", "Remove from this playlist")) }, onClick = {
+                                                            more = false
+                                                            val active = client ?: return@DropdownMenuItem
+                                                            val displayed = songs
+                                                            busy = true
+                                                            scope.launch {
+                                                                try {
+                                                                    withContext(Dispatchers.IO) { active.removePlaylistEntry(playlistId, index, displayed) }
+                                                                    songs = displayed.filterIndexed { i, _ -> i != index }
+                                                                } catch (e: IOException) { message = describeError(e, chinese) }
+                                                                finally { busy = false }
+                                                            }
+                                                        })
+                                                    }
+                                                    androidx.compose.material3.DropdownMenuItem(text = { Text(label("加入歌单", "Add to playlist")) }, onClick = {
+                                                        more = false
+                                                        songForPlaylist = song
+                                                    })
+                                                    androidx.compose.material3.DropdownMenuItem(text = { Text(label("下载原文件", "Download original")) }, onClick = {
+                                                        more = false
+                                                        val active = client ?: return@DropdownMenuItem
+                                                        val chooser = JFileChooser().apply { fileSelectionMode = JFileChooser.DIRECTORIES_ONLY }
+                                                        if (chooser.showSaveDialog(window) == JFileChooser.APPROVE_OPTION) {
+                                                            val directory = chooser.selectedFile.toPath()
+                                                            busy = true
+                                                            scope.launch {
+                                                                try {
+                                                                    val file = withContext(Dispatchers.IO) { active.downloadSong(song, directory) }
+                                                                    message = label("已保存：", "Saved: ") + file.fileName
+                                                                } catch (e: IOException) { message = describeError(e, chinese) }
+                                                                finally { busy = false }
+                                                            }
+                                                        }
+                                                    })
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -467,7 +781,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                         busy = true
                                         scope.launch {
                                             try {
-                                                val found = withContext(Dispatchers.IO) { active.search(requestedQuery, offset).song.orEmpty() }
+                                                val found = withContext(Dispatchers.IO) { active.search(requestedQuery, offset, folder = musicFolder?.id).song.orEmpty() }
                                                 songs = songs + found
                                                 hasMore = found.size == 100
                                             } catch (e: IOException) {
@@ -477,54 +791,21 @@ private fun DesktopApp(exit: () -> Unit) {
                                     }) { Text(label("加载更多", "Load more")) }
                                 }
                             }
-                            if (current != null) {
-                                Surface(shape = RoundedCornerShape(16.dp), color = Color(0xff292f40).copy(alpha = 0.95f)) {
-                                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                                        Text(current!!.title, style = MaterialTheme.typography.titleMedium)
-                                        Text(if (lyricText.isNotBlank()) lyricText else label("暂无歌词", "No lyrics"), color = lyricColor, maxLines = 3)
-                                        if (lyricError.isNotBlank()) Text(lyricError, color = MaterialTheme.colorScheme.error)
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            TextButton(onClick = {
-                                                val index = songs.indexOfFirst { it.navidromeID == current?.navidromeID }
-                                                val previous = songs.getOrNull(index - 1)
-                                                if (previous != null) playSong(previous)
-                                            }) { Text(label("上一首", "Previous")) }
-                                            TextButton(onClick = { player.toggle() }) { Text(if (playback.playing) label("暂停", "Pause") else label("播放", "Play")) }
-                                            TextButton(onClick = {
-                                                val index = songs.indexOfFirst { it.navidromeID == current?.navidromeID }
-                                                val next = songs.getOrNull(index + 1).takeIf { index >= 0 }
-                                                if (next != null) playSong(next)
-                                            }) { Text(label("下一首", "Next")) }
-                                            Slider(
-                                                value = if (playback.durationMs > 0) (playback.positionMs.toFloat() / playback.durationMs).coerceIn(0f, 1f) else 0f,
-                                                onValueChange = { player.seek((it * playback.durationMs).toLong()) },
-                                                enabled = playback.durationMs > 0,
-                                                modifier = Modifier.weight(1f),
-                                            )
-                                            Text("${formatTime(playback.positionMs)} / ${formatTime(playback.durationMs)}")
-                                            Text(label("音量", "Volume"), Modifier.padding(start = 12.dp))
-                                            Slider(volume, onValueChange = { volume = it; player.volume(it) }, modifier = Modifier.width(90.dp))
-                                        }
-                                        if (playback.error) Text(label("播放失败：请检查服务器转码和音频格式。", "Playback failed: check server transcoding and audio format."), color = MaterialTheme.colorScheme.error)
-                                    }
-                                }
-                            }
                         }
+                        PlayerPanel(queue, playback, player, chinese, lyricText, lyricError, lyricColor, repeat, timerMinutes,
+                            onRepeat = { repeat = it }, onTimer = { timerDeadline = it?.let { mins -> System.nanoTime() + mins * 60_000_000_000L } },
+                            onSelect = ::playIndex, onReorder = { queue = it })
                         if (busy) Text(label("处理中…", "Working…"))
                         if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error)
                     }
                 }
+              }
             }
         }
     }
     if (overlay && current != null) {
         LyricOverlay(lyricText, lyricColor, onError = { message = it }, onClose = { overlay = false; saveAppearance() })
     }
-}
-
-private fun formatTime(millis: Long): String {
-    val seconds = millis.coerceAtLeast(0) / 1000
-    return "%d:%02d".format(seconds / 60, seconds % 60)
 }
 
 private fun describeError(error: Exception, chinese: Boolean): String {

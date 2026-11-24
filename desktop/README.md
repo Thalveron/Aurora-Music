@@ -3,13 +3,23 @@
 The Windows app is under development. The Kotlin/JVM project in `jvm/` directly
 reuses the Android app's Subsonic models, authentication, and lyric parsing.
 
-The development app supports connecting to one Navidrome or compatible
-Subsonic server, song search, album and playlist browsing, streaming, desktop lyrics, a local background,
-Chinese and English, and update checks. It is not yet a full replacement for
-the Android app. FLAC, OGG, Opus, WMA and ALAC playback requests MP3
-transcoding from the server; supported formats depend on JavaFX and the
-server. Windows testing, packaging and distribution-license review are
-required before release.
+The app and its Windows launcher are named **Aurora Music**. Their icons use
+the Android app's `aurora_music_icon` artwork. Android TV screens are intentionally
+not part of the Windows port.
+
+| Area | Available in the development source |
+| --- | --- |
+| Server library | Save multiple Navidrome/Subsonic accounts, connect one at a time, search songs, browse artists, biographies, albums, favorites and radio. Album views include recent, newest, frequent and random. Individual endpoints depend on the server. |
+| Server playlists and downloads | Create, rename and delete playlists; add songs and remove specific entries. Filter songs and albums by server music folder. Download original tracks or an album to a chosen directory without replacing existing files. |
+| Local library | No login needed. Scan selected folders for MP3, WAV, AIFF and M4A, search filename/folder-based metadata, manage local playlists, and load sibling `.lrc` lyrics. |
+| Playback | Independent queue, previous/next, reordering, shuffle upcoming, repeat, sleep timer, seek, volume, optional listening history reporting and MP3 bitrate limits. Server FLAC, OGG, Opus, WMA and ALAC request server-side MP3 transcoding. |
+| Appearance | Chinese and English, local backgrounds, always-on-top desktop lyrics and lyric color picker. |
+
+**Not release-ready:** local FLAC/OGG playback, embedded local tag/artwork indexing
+and additional Android lyric sources
+are among the remaining differences. Windows installation, real-server playback,
+desktop lyric behavior, update installation and distribution licensing need
+sign-off. A successful build is not evidence that those user journeys work.
 
 Server passwords are encrypted with Windows DPAPI for the current Windows user.
 Plain HTTP requires explicit confirmation. Background images stay on the
@@ -33,8 +43,9 @@ gradlew.bat -p desktop/jvm test packageExe
 ```
 
 The installer includes a Java runtime. It is unsigned unless separately
-signed. `.github/workflows/windows-desktop.yml` can build a test artifact on a
-Windows runner; that workflow does not publish a release.
+signed. `.github/workflows/windows-desktop.yml` builds and checks the launcher on a
+Windows runner. Uploading an installer requires an explicit manual workflow input;
+push builds do not provide downloads, and the workflow does not publish releases.
 
 Windows releases use a matching
 `Aurora-Music-vX.Y.Z-windows-amd64.exe` asset with a GitHub SHA-256 digest.

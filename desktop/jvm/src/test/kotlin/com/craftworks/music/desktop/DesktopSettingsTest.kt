@@ -18,8 +18,13 @@ class DesktopSettingsTest {
             settings.saveServer("https://example.test", "tester", "fake-test-password", false)
             assertFalse(preferences.get("server", "").contains("fake-test-password"))
             assertEquals("fake-test-password", settings.password(settings.server()!!))
+            // Simulate a profile created by the older single-server version.
+            preferences.node("profiles").clear()
+            settings.saveServer("https://second.example.test", "another", "another-fake-password", false)
+            assertEquals(listOf("another", "tester"), settings.servers().map { it.username })
             settings.removeServer()
             assertEquals(null, settings.server())
+            assertEquals("fake-test-password", settings.password(settings.servers().single()))
         } finally {
             val parent = preferences.parent()
             preferences.removeNode()

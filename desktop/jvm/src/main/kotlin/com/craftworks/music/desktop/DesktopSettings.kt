@@ -6,6 +6,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.IOException
+import java.security.MessageDigest
+import java.util.HexFormat
 import java.util.Base64
 import java.util.prefs.BackingStoreException
 import java.util.prefs.Preferences
@@ -33,6 +35,15 @@ internal class DesktopSettings(
     var overlay: Boolean
         get() = preferences.getBoolean("overlay", false)
         set(value) { preferences.putBoolean("overlay", value) }
+    var accelerated: Boolean
+        get() = preferences.getBoolean("accelerated", false)
+        set(value) { preferences.putBoolean("accelerated", value) }
+    var scrobblePercent: Int
+        get() = preferences.getInt("scrobblePercent", 0)
+        set(value) { preferences.putInt("scrobblePercent", value) }
+    var maxBitRate: Int
+        get() = preferences.getInt("maxBitRate", 0)
+        set(value) { preferences.putInt("maxBitRate", value) }
 
     fun flush() {
         try {
@@ -44,11 +55,27 @@ internal class DesktopSettings(
 
     fun server(): SavedServer? {
         val saved = preferences.get("server", null) ?: return null
+        return decode(saved)
+    }
+
+    private fun decode(saved: String): SavedServer {
         return try {
             Json.decodeFromString<SavedServer>(saved)
         } catch (_: IllegalArgumentException) {
             throw IOException("Saved server settings are invalid")
         }
+    }
+
+    private val profiles get() = preferences.node("profiles")
+    private fun key(server: SavedServer): String {
+        val identity = server.address.trim().trimEnd('/') + "\u0000" + server.username
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(identity.toByteArray()))
+    }
+
+    fun servers(): List<SavedServer> = try {
+        (listOfNotNull(server()) + profiles.keys().mapNotNull { id -> profiles.get(id, null)?.let(::decode) }).distinctBy(::key)
+    } catch (_: BackingStoreException) {
+        throw IOException("Could not read saved servers")
     }
 
     fun password(server: SavedServer): String {
@@ -67,7 +94,10 @@ internal class DesktopSettings(
         } catch (_: RuntimeException) {
             throw IOException("Unable to protect server credentials")
         }
-        preferences.put("server", Json.encodeToString(SavedServer(address, username, encrypted, allowHttp)))
+        val profile = SavedServer(address, username, encrypted, allowHttp)
+        server()?.let { profiles.put(key(it), Json.encodeToString(it)) }
+        profiles.put(key(profile), Json.encodeToString(profile))
+        preferences.put("server", Json.encodeToString(profile))
         try {
             preferences.flush()
         } catch (_: BackingStoreException) {
@@ -75,8 +105,10 @@ internal class DesktopSettings(
         }
     }
 
-    fun removeServer() {
-        preferences.remove("server")
+    fun removeServer(profile: SavedServer? = server()) {
+        if (profile == null) return
+        profiles.remove(key(profile))
+        if (server()?.let(::key) == key(profile)) preferences.remove("server")
         try {
             preferences.flush()
         } catch (_: BackingStoreException) {

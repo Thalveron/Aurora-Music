@@ -3,10 +3,11 @@ package com.craftworks.music.desktop
 import javafx.application.Platform
 import javafx.embed.swing.JFXPanel
 import javafx.scene.media.Media
-import javafx.scene.media.MediaException
 import javafx.scene.media.MediaPlayer
 import javafx.util.Duration
 import com.craftworks.music.data.model.MediaData
+import java.io.IOException
+import java.net.URI
 import javax.swing.SwingUtilities
 
 internal data class PlaybackState(
@@ -18,7 +19,7 @@ internal data class PlaybackState(
 )
 
 internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : AutoCloseable {
-    private val proxy = PlaybackProxy()
+    private var proxy: PlaybackProxy? = null
     private var player: MediaPlayer? = null
     private var generation = 0
     private var state = PlaybackState()
@@ -29,26 +30,43 @@ internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : Auto
         Platform.setImplicitExit(false)
     }
 
-    fun play(client: SubsonicClient, song: MediaData.Song) {
-        val transcode = song.format.lowercase() in setOf("flac", "ogg", "opus", "wma", "alac")
-        val url = proxy.source(client.streamUri(song.navidromeID, transcode))
+    fun play(client: SubsonicClient, song: MediaData.Song, maxBitRate: Int = 0) {
+        val transcode = maxBitRate > 0 || song.format.lowercase() in setOf("flac", "ogg", "opus", "wma", "alac")
+        val activeProxy = proxy ?: PlaybackProxy().also { proxy = it }
+        val url = activeProxy.source(client.streamUri(song.navidromeID, transcode, maxBitRate))
+        playSource { url }
+    }
+
+    fun playLocal(track: LocalTrack) {
+        closeProxy()
+        playSource { track.playbackUri().toASCIIString() }
+    }
+
+    fun playRadio(uri: URI) {
+        val url = radioSource(uri)
+        closeProxy()
+        playSource { url }
+    }
+
+    private fun playSource(source: () -> String) {
         val id = ++generation
         state = PlaybackState()
         onChange(state)
         Platform.runLater {
             player?.dispose()
-            try {
-                val next = MediaPlayer(Media(url))
-                next.volume = volume
-                player = next
-                fun update(transform: (PlaybackState) -> PlaybackState) {
-                    SwingUtilities.invokeLater {
-                        if (id == generation) {
-                            state = transform(state)
-                            onChange(state)
-                        }
+            player = null
+            fun update(transform: (PlaybackState) -> PlaybackState) {
+                SwingUtilities.invokeLater {
+                    if (id == generation) {
+                        state = transform(state)
+                        onChange(state)
                     }
                 }
+            }
+            try {
+                val next = MediaPlayer(Media(source()))
+                next.volume = volume
+                player = next
                 next.currentTimeProperty().addListener { _, _, time ->
                     update { it.copy(positionMs = time.toMillis().toLong().coerceAtLeast(0)) }
                 }
@@ -62,13 +80,10 @@ internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : Auto
                 next.setOnEndOfMedia { update { it.copy(playing = false, ended = true) } }
                 next.setOnError { update { it.copy(playing = false, error = true) } }
                 next.media.setOnError { update { it.copy(playing = false, error = true) } }
-            } catch (_: MediaException) {
-                SwingUtilities.invokeLater {
-                    if (id == generation) {
-                        state = state.copy(error = true)
-                        onChange(state)
-                    }
-                }
+            } catch (_: IOException) {
+                update { it.copy(playing = false, error = true) }
+            } catch (_: RuntimeException) {
+                update { it.copy(playing = false, error = true) }
             }
         }
     }
@@ -78,8 +93,11 @@ internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : Auto
             player?.let {
                 if (it.status == MediaPlayer.Status.PLAYING) it.pause() else it.play()
             }
+
         }
     }
+
+    fun pause() { Platform.runLater { player?.pause() } }
 
     fun seek(positionMs: Long) {
         Platform.runLater { player?.seek(Duration.millis(positionMs.coerceAtLeast(0).toDouble())) }
@@ -91,6 +109,7 @@ internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : Auto
     }
 
     fun stop() {
+        closeProxy()
         generation++
         state = PlaybackState()
         onChange(state)
@@ -99,7 +118,17 @@ internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : Auto
 
     override fun close() {
         stop()
-        proxy.close()
         Platform.exit()
     }
+
+    private fun closeProxy() {
+        proxy?.close()
+        proxy = null
+    }
+}
+
+internal fun radioSource(uri: URI): String {
+    return requireNotNull(serverLibraryRadioUri(uri.toASCIIString())) {
+        "Expected a credential-free HTTP(S) station URL"
+    }.toASCIIString()
 }

@@ -61,11 +61,12 @@ compose.desktop {
         mainClass = "com.craftworks.music.desktop.MainKt"
         nativeDistributions {
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe)
-            packageName = "AuroraMusic"
+            packageName = "Aurora Music"
             packageVersion = "1.33.0"
             appResourcesRootDir.set(layout.buildDirectory.dir("distribution-resources"))
             modules("java.net.http", "java.prefs", "jdk.httpserver", "jdk.unsupported", "jdk.crypto.ec")
             windows {
+                iconFile.set(project.file("branding/aurora-music.ico"))
                 menuGroup = "Aurora Music"
                 shortcut = true
             }

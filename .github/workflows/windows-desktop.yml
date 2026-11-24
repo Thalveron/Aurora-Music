@@ -2,6 +2,11 @@ name: Windows desktop build
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_installer:
+        description: 'Attach a downloadable installer after validation'
+        type: boolean
+        default: false
   push:
     paths:
       - 'desktop/jvm/**'
@@ -41,7 +46,7 @@ jobs:
       - name: Smoke test packaged launcher
         shell: pwsh
         run: |
-          $launcher = 'desktop/jvm/build/compose/binaries/main/app/AuroraMusic/AuroraMusic.exe'
+          $launcher = 'desktop/jvm/build/compose/binaries/main/app/Aurora Music/Aurora Music.exe'
           if (-not (Test-Path $launcher)) { throw 'Packaged launcher not found' }
           $process = Start-Process -FilePath $launcher -PassThru
           try {
@@ -52,6 +57,7 @@ jobs:
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
           }
       - name: Upload build for testing
+        if: github.event_name == 'workflow_dispatch' && inputs.upload_installer
         uses: actions/upload-artifact@v4
         with:
           name: Aurora-Music-windows-test-build
