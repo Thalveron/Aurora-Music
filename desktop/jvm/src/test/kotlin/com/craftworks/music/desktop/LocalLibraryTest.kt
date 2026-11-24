@@ -96,13 +96,16 @@ class LocalLibraryTest {
         for (track in tracks) {
             val end = java.util.concurrent.CountDownLatch(1)
             var advanced = false
+            var latest = PlaybackState()
             val player = AudioPlayer(silentOutput = true) {
+                latest = it
                 if (it.playing && it.positionMs > 0) advanced = true
                 if (it.error || it.ended) end.countDown()
             }
             try {
                 javax.swing.SwingUtilities.invokeAndWait { player.playLocal(track) }
-                assertTrue(track.song.format, end.await(12, java.util.concurrent.TimeUnit.SECONDS) && advanced)
+                val finished = end.await(20, java.util.concurrent.TimeUnit.SECONDS)
+                assertTrue("${track.song.format}: $latest, advanced=$advanced", finished && advanced && latest.ended)
             } finally { player.close() }
         }
     }

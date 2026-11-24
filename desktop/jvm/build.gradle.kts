@@ -67,6 +67,7 @@ val prepareDistributionResources by tasks.registering(Sync::class) {
 }
 
 tasks.withType<Test>().configureEach {
+    testLogging { exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
     dependsOn(prepareDistributionResources)
     systemProperty("compose.application.resources.dir", layout.buildDirectory.dir("distribution-resources/common").get().asFile)
 }
