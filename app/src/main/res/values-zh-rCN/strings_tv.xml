@@ -50,4 +50,5 @@
     <string name="Tv_Songs_Count">共 %1$d 首</string>
     <string name="Tv_Refresh_Library">刷新曲库</string>
     <string name="Tv_Refreshing">刷新中…</string>
+    <string name="Tv_Onboarding_Skipped">还没有添加音乐来源，之后可以在“设置 → 音乐来源”中添加。</string>
 </resources>

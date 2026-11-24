@@ -1,5 +1,12 @@
 package com.craftworks.music.ui.elements.dialogs.tv
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -107,16 +114,24 @@ fun OnboardingDialog(
                 ) {
                     when (it) {
                         OnboardingStep.OVERVIEW -> {
-                            Icon(
-                                ImageVector.vectorResource(R.drawable.ic_banner_foreground),
+                            Spacer(Modifier.height(24.dp))
+                            Image(
+                                painter = painterResource(R.drawable.aurora_music_icon),
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.size(96.dp)
                             )
-
+                            Text(
+                                text = "Aurora Music",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
                             Text(
                                 text = stringResource(R.string.No_Providers_Splash),
-                                modifier = Modifier.width(320.dp),
-                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.width(360.dp),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
                             )
 
                             Button(
@@ -127,7 +142,8 @@ fun OnboardingDialog(
                             ) {
                                 Text(
                                     text = stringResource(R.string.Action_Next),
-                                    textAlign = TextAlign.Center
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
@@ -246,7 +262,8 @@ private fun OnboardingSetupProviders(
     ) {
         Text(
             text = stringResource(R.string.Action_Next),
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -255,15 +272,24 @@ private fun OnboardingSetupProviders(
 private fun OnboardingDoneScreen(
     setFinished: () -> Unit = { }
 ) {
-    Icon(
-        ImageVector.vectorResource(R.drawable.ic_banner_foreground),
+    val servers by NavidromeManager.allServers.collectAsStateWithLifecycle()
+    val folders by LocalProviderManager.allFolders.collectAsStateWithLifecycle()
+    val hasSources = servers.isNotEmpty() || folders.isNotEmpty()
+
+    Spacer(Modifier.height(24.dp))
+    Image(
+        painter = painterResource(R.drawable.aurora_music_icon),
         contentDescription = null,
-        tint = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.size(96.dp)
     )
 
     Text(
-        text = stringResource(R.string.No_Providers_Done),
-        modifier = Modifier.width(320.dp),
+        // Setup can be skipped, so only claim a source was added when one was.
+        text = stringResource(
+            if (hasSources) R.string.No_Providers_Done else R.string.Tv_Onboarding_Skipped
+        ),
+        modifier = Modifier.width(360.dp),
+        style = MaterialTheme.typography.bodyLarge,
         textAlign = TextAlign.Center,
         color = MaterialTheme.colorScheme.onBackground,
     )
@@ -274,7 +300,8 @@ private fun OnboardingDoneScreen(
     ) {
         Text(
             text = stringResource(R.string.Action_Go),
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }

@@ -26,7 +26,7 @@ adb shell am start -n "$PKG/com.craftworks.music.MainActivity"
 step 01-first-run 10
 key DPAD_DOWN DPAD_CENTER
 step 02-sources
-key DPAD_DOWN DPAD_DOWN
+key DPAD_DOWN
 step 03-add-server-focused
 key DPAD_CENTER
 step 04-server-form 3

@@ -49,4 +49,5 @@
     <string name="Tv_Songs_Count">%1$d songs</string>
     <string name="Tv_Refresh_Library">Refresh library</string>
     <string name="Tv_Refreshing">Refreshing…</string>
+    <string name="Tv_Onboarding_Skipped">No source was added yet. You can add one later in Settings → Media Providers.</string>
 </resources>
