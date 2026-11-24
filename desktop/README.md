@@ -11,12 +11,11 @@ not part of the Windows port.
 | --- | --- |
 | Server library | Save multiple Navidrome/Subsonic accounts, connect one at a time, search songs, browse artists, biographies, albums, favorites and radio. Album views include recent, newest, frequent and random. Individual endpoints depend on the server. |
 | Server playlists and downloads | Create, rename and delete playlists; add songs and remove specific entries. Filter songs and albums by server music folder. Download original tracks or an album to a chosen directory without replacing existing files. |
-| Local library | No login needed. Scan selected folders for MP3, WAV, AIFF and M4A, search filename/folder-based metadata, manage local playlists, and load sibling `.lrc` lyrics. |
+| Local library | No login needed. Scan selected folders for FLAC, OGG, Opus, MP3, WAV, AIFF and M4A, search filename/folder-based metadata, manage local playlists, and load sibling `.lrc` lyrics. |
 | Playback | Independent queue, previous/next, reordering, shuffle upcoming, repeat, sleep timer, seek, volume, optional listening history reporting and MP3 bitrate limits. Server FLAC, OGG, Opus, WMA and ALAC request server-side MP3 transcoding. |
 | Appearance | Chinese and English, local backgrounds, always-on-top desktop lyrics and lyric color picker. |
 
-**Not release-ready:** local FLAC/OGG playback, embedded local tag/artwork indexing
-and additional Android lyric sources
+**Not release-ready:** embedded local tag/artwork indexing and additional Android lyric sources
 are among the remaining differences. Windows installation, real-server playback,
 desktop lyric behavior, update installation and distribution licensing need
 sign-off. A successful build is not evidence that those user journeys work.
@@ -42,7 +41,12 @@ On Windows, with JDK 21 and WiX 3 installed:
 gradlew.bat -p desktop/jvm test packageExe
 ```
 
-The installer includes a Java runtime. It is unsigned unless separately
+The installer includes a Java runtime and a platform-specific FFmpeg executable.
+Local FLAC, Ogg Vorbis and Opus decode offline to a temporary 16-bit PCM WAV
+before playback; long tracks need extra disk space and startup time. No codec
+download or system FFmpeg is needed. Before distributing, review and supply
+the corresponding source and notices for the exact bundled FFmpeg build.
+The installer is unsigned unless separately
 signed. `.github/workflows/windows-desktop.yml` builds and checks the launcher on a
 Windows runner. Uploading an installer requires an explicit manual workflow input;
 push builds do not provide downloads, and the workflow does not publish releases.

@@ -48,6 +48,10 @@ jobs:
         run: |
           $launcher = 'desktop/jvm/build/compose/binaries/main/app/Aurora Music/Aurora Music.exe'
           if (-not (Test-Path $launcher)) { throw 'Packaged launcher not found' }
+          $decoder = Join-Path (Split-Path $launcher) 'app/resources/decoder/ffmpeg.exe'
+          if (-not (Test-Path $decoder)) { throw 'Bundled offline decoder not found' }
+          & $decoder -version
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled offline decoder failed to start' }
           $process = Start-Process -FilePath $launcher -PassThru
           try {
             Start-Sleep -Seconds 15

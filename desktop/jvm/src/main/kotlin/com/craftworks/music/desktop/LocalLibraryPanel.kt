@@ -144,7 +144,7 @@ internal fun LocalLibraryPanel(
                 Text(label("重新扫描", "Rescan"))
             }
         }
-        Text(label("仅扫描所选文件夹：MP3、WAV、AIFF、M4A。", "Only selected folders are scanned: MP3, WAV, AIFF, M4A."))
+        Text(label("仅扫描所选文件夹：FLAC、OGG、Opus、MP3、WAV、AIFF、M4A。", "Only selected folders are scanned: FLAC, OGG, Opus, MP3, WAV, AIFF, M4A."))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box {
                 TextButton({ listMenu = true }, enabled = listReady) { Text(selectedList ?: label("全部本地歌曲", "All local tracks")) }

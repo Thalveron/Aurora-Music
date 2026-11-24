@@ -8,6 +8,10 @@ import javafx.util.Duration
 import com.craftworks.music.data.model.MediaData
 import java.io.IOException
 import java.net.URI
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import javax.swing.SwingUtilities
 
 internal data class PlaybackState(
@@ -24,6 +28,9 @@ internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : Auto
     private var generation = 0
     private var state = PlaybackState()
     @Volatile private var volume = 1.0
+    private val decoder = Executors.newSingleThreadExecutor { Thread(it, "aurora-decoder").apply { isDaemon = true } }
+    private var decoding: Future<*>? = null
+    private var wave: Path? = null // Accessed only on the JavaFX thread, after disposing its player.
 
     init {
         JFXPanel()
@@ -39,7 +46,25 @@ internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : Auto
 
     fun playLocal(track: LocalTrack) {
         closeProxy()
-        playSource { track.playbackUri().toASCIIString() }
+        if (track.song.format !in offlineFormats) {
+            playSource { track.playbackUri().toASCIIString() }
+            return
+        }
+        stop()
+        val id = generation
+        decoding = decoder.submit {
+            try {
+                val decoded = decodeLocal(track)
+                SwingUtilities.invokeLater {
+                    if (id == generation) playSource(decoded) { decoded.toUri().toASCIIString() }
+                    else removeWave(decoded)
+                }
+            } catch (_: IOException) {
+                SwingUtilities.invokeLater {
+                    if (id == generation) { state = PlaybackState(error = true); onChange(state) }
+                }
+            }
+        }
     }
 
     fun playRadio(uri: URI) {
@@ -48,13 +73,17 @@ internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : Auto
         playSource { url }
     }
 
-    private fun playSource(source: () -> String) {
+    private fun playSource(decoded: Path? = null, source: () -> String) {
+        decoding?.cancel(true)
+        decoding = null
         val id = ++generation
         state = PlaybackState()
         onChange(state)
         Platform.runLater {
             player?.dispose()
             player = null
+            wave?.let(::removeWave)
+            wave = decoded
             fun update(transform: (PlaybackState) -> PlaybackState) {
                 SwingUtilities.invokeLater {
                     if (id == generation) {
@@ -109,15 +138,18 @@ internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : Auto
     }
 
     fun stop() {
+        decoding?.cancel(true)
+        decoding = null
         closeProxy()
         generation++
         state = PlaybackState()
         onChange(state)
-        Platform.runLater { player?.dispose(); player = null }
+        Platform.runLater { player?.dispose(); player = null; wave?.let(::removeWave); wave = null }
     }
 
     override fun close() {
         stop()
+        decoder.shutdownNow()
         Platform.exit()
     }
 
@@ -125,6 +157,10 @@ internal class AudioPlayer(private val onChange: (PlaybackState) -> Unit) : Auto
         proxy?.close()
         proxy = null
     }
+}
+
+private fun removeWave(path: Path) {
+    try { Files.deleteIfExists(path) } catch (_: IOException) { path.toFile().deleteOnExit() }
 }
 
 internal fun radioSource(uri: URI): String {

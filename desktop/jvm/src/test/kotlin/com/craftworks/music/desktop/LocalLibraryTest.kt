@@ -82,5 +82,27 @@ class LocalLibraryTest {
             "https://user:password@host/stream", "https://@host/stream", "https://host/stream?u=test&t=fake&s=salt")) {
             assertThrows(IllegalArgumentException::class.java) { radioSource(URI(url)) }
         }
+
+    }
+
+    @Test fun offlineDecoderProducesPlayableWaveForAllThreeFormats() = runBlocking {
+            val root = fixture.newFolder("offline").toPath().toRealPath()
+            for ((extension, codec) in mapOf("flac" to "flac", "ogg" to "libvorbis", "opus" to "libopus")) {
+                val process = ProcessBuilder(bundledDecoder().toString(), "-v", "error", "-f", "lavfi", "-i",
+                    "sine=frequency=440:duration=0.2", "-c:a", codec, root.resolve("fixture.$extension").toString())
+                    .redirectError(ProcessBuilder.Redirect.INHERIT).start()
+                assertEquals(0, process.waitFor())
+            }
+            val tracks = scanLocalFolders(listOf(root)).tracks
+            assertEquals(3, tracks.size)
+            for (track in tracks) {
+                val wave = decodeLocal(track)
+                try {
+                    javax.sound.sampled.AudioSystem.getAudioInputStream(wave.toFile()).use {
+                        assertTrue(it.frameLength >= 8000)
+                        assertEquals(16, it.format.sampleSizeInBits)
+                    }
+                } finally { Files.delete(wave) }
+        }
     }
 }

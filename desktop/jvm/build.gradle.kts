@@ -43,12 +43,31 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
+val decoderBinary by configurations.creating
+val decoderPlatform = when {
+    System.getProperty("os.name").startsWith("Windows") -> "win64"
+    System.getProperty("os.name").startsWith("Mac") -> if (System.getProperty("os.arch") == "aarch64") "osxm1" else "osx64"
+    else -> if (System.getProperty("os.arch") == "aarch64") "linux-arm64" else "linux64"
+}
+dependencies { decoderBinary("ws.schild:jave-nativebin-$decoderPlatform:4.2.0@jar") }
 val prepareDistributionResources by tasks.registering(Sync::class) {
     from("src/main/app-resources")
+    from({ zipTree(decoderBinary.singleFile) }) {
+        include("**/ffmpeg-*")
+        eachFile { path = "common/decoder/" + if (decoderPlatform == "win64") "ffmpeg.exe" else "ffmpeg" }
+        includeEmptyDirs = false
+        filePermissions { unix("755") }
+    }
     into(layout.buildDirectory.dir("distribution-resources"))
     into("common/licenses/aurora") {
         from("../../LICENSE", "../../NOTICE")
     }
+
+}
+
+tasks.withType<Test>().configureEach {
+    dependsOn(prepareDistributionResources)
+    systemProperty("compose.application.resources.dir", layout.buildDirectory.dir("distribution-resources/common").get().asFile)
 }
 
 javafx {
