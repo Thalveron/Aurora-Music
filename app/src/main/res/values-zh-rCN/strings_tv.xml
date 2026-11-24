@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="Action_Cancel">取消</string>
     <string name="Tv_Home">首页</string>
     <string name="Tv_Now_Playing">正在播放</string>
     <string name="Tv_Greeting_Morning">早上好</string>
