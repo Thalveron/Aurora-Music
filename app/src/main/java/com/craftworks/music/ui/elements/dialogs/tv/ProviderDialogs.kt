@@ -1,5 +1,12 @@
 package com.craftworks.music.ui.elements.dialogs.tv
 
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import android.content.res.Configuration
 import android.os.Environment
 import androidx.activity.compose.BackHandler
@@ -319,6 +326,11 @@ fun CreateNavidromeProviderDialog(
 
 }
 
+/**
+ * A text field for remote controls. Focusing it does not open the keyboard, because an open TV
+ * keyboard takes over the arrow keys and the rest of the form becomes unreachable. OK starts
+ * editing; the keyboard's action key, or moving away, ends it.
+ */
 @Composable
 private fun ServerField(
     value: String,
@@ -332,10 +344,34 @@ private fun ServerField(
     placeholder: String? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
+    var editing by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
+        readOnly = !editing,
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { if (!it.isFocused) editing = false }
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
+                        if (editing) {
+                            false
+                        } else {
+                            editing = true
+                            keyboard?.show()
+                            true
+                        }
+
+                    Key.DirectionDown -> focusManager.moveFocus(FocusDirection.Down)
+                    Key.DirectionUp -> focusManager.moveFocus(FocusDirection.Up)
+                    else -> false
+                }
+            },
         label = { androidx.compose.material3.Text(label) },
         placeholder = placeholder?.let { { androidx.compose.material3.Text(it) } },
         singleLine = true,
@@ -346,7 +382,12 @@ private fun ServerField(
             imeAction = imeAction,
             autoCorrectEnabled = false
         ),
-        keyboardActions = KeyboardActions(onAny = { onImeAction() }),
+        keyboardActions = KeyboardActions(
+            onAny = {
+                editing = false
+                onImeAction()
+            }
+        ),
         shape = RoundedCornerShape(14.dp)
     )
 }

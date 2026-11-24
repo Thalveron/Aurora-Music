@@ -31,12 +31,22 @@ step 03-add-server-focused
 key DPAD_CENTER
 step 04-server-form 3
 
+# OK opens the keyboard on a field; closing it hands the arrow keys back to the form.
+type_into_field() {
+  key DPAD_CENTER
+  sleep 1
+  adb shell input text "$1"
+  sleep 1
+  if adb shell dumpsys input_method | grep -q "mInputShown=true"; then key BACK; fi
+}
+
 # A wrong address first: the form must explain itself instead of doing nothing.
-adb shell input text "999.invalid"
+type_into_field "999.invalid"
+step 04b-address-typed
 key DPAD_DOWN
-adb shell input text "demo"
+type_into_field "demo"
 key DPAD_DOWN
-adb shell input text "demo"
+type_into_field "demo"
 key DPAD_DOWN DPAD_DOWN DPAD_DOWN DPAD_RIGHT
 step 05-ready-to-connect
 key DPAD_CENTER
@@ -44,8 +54,12 @@ step 06-unreachable-address 12
 
 # Then the public Navidrome demo server.
 key DPAD_UP DPAD_UP DPAD_UP DPAD_UP DPAD_UP
-for _ in $(seq 12); do adb shell input keyevent DEL; done
+key DPAD_CENTER
+sleep 1
+for _ in $(seq 11); do adb shell input keyevent DEL; done
 adb shell input text "https://demo.navidrome.org"
+sleep 1
+if adb shell dumpsys input_method | grep -q "mInputShown=true"; then key BACK; fi
 key DPAD_DOWN DPAD_DOWN DPAD_DOWN DPAD_DOWN DPAD_DOWN DPAD_RIGHT
 step 07-demo-address
 key DPAD_CENTER
