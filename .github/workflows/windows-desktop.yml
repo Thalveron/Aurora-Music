@@ -37,7 +37,7 @@ jobs:
           }
       - name: Test and build installer
         shell: pwsh
-        run: .\gradlew.bat -p desktop/jvm test packageExe --no-daemon
+        run: .\gradlew.bat -p desktop/jvm test createDistributable packageExe --no-daemon
       - name: Smoke test packaged launcher
         shell: pwsh
         run: |
