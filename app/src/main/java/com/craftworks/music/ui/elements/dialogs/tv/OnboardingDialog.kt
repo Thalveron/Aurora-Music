@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import com.craftworks.music.ui.elements.tv.auroraBackground
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
@@ -86,7 +87,7 @@ fun OnboardingDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .drawBehind { drawRect(color = backgroundColor) }
+                .auroraBackground()
                 .padding(horizontal = 48.dp, vertical = 48.dp),
         ) {
             AnimatedContent(

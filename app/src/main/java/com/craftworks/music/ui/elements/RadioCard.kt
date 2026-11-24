@@ -56,7 +56,7 @@ fun RadioCard(
         AsyncImage(
             // Use generic radio image as we cannot get the radio's logo reliably.
             model = ImageRequest.Builder(LocalContext.current)
-                .data(("android.resource://com.craftworks.music/" + R.drawable.radioplaceholder).toUri())
+                .data(("android.resource://${com.craftworks.music.updates.MusicUpdateRules.PACKAGE}/" + R.drawable.radioplaceholder).toUri())
                 .crossfade(true).build(),
             fallback = painterResource(R.drawable.placeholder),
             contentScale = ContentScale.FillWidth,

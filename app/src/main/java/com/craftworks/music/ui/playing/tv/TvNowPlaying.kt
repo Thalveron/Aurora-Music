@@ -181,7 +181,7 @@ fun TvNowPlaying(
                     },
                     title = {
                         Text(
-                            text = metadata?.title.toString(),
+                            text = metadata?.title?.toString().orEmpty(),
                             color = iconTextColor,
                             maxLines = 1,
                             modifier = Modifier
@@ -202,7 +202,7 @@ fun TvNowPlaying(
                     },
                     description = {
                         Text(
-                            text = metadata?.artist.toString(),
+                            text = metadata?.artist?.toString().orEmpty(),
                             color = iconTextColor,
                             maxLines = 1,
                             modifier = Modifier

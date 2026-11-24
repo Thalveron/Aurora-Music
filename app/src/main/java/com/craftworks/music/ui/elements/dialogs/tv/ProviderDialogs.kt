@@ -3,9 +3,28 @@ package com.craftworks.music.ui.elements.dialogs.tv
 import android.content.res.Configuration
 import android.os.Environment
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.tv.material3.Button
+import androidx.tv.material3.OutlinedButton
+import com.craftworks.music.data.datasource.navidrome.NavidromeDataSource
+import com.craftworks.music.providers.navidrome.NetworkFailure
+import com.craftworks.music.providers.navidrome.ServerCheck
+import com.craftworks.music.providers.navidrome.normalizeServerUrl
+import com.craftworks.music.ui.elements.tv.AuroraBackdrop
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,7 +40,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
@@ -36,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import com.craftworks.music.ui.elements.tv.auroraBackground
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component1
 import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.component2
@@ -57,7 +76,6 @@ import androidx.compose.ui.tooling.preview.Wallpapers
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.tv.material3.CarouselDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.ListItem
@@ -69,353 +87,283 @@ import com.craftworks.music.managers.LocalProviderManager
 import com.craftworks.music.managers.NavidromeManager
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
 import com.craftworks.music.managers.settings.MediaProviderSettingsManager
-import com.craftworks.music.providers.navidrome.getNavidromeStatus
 import com.craftworks.music.providers.navidrome.navidromeStatus
 import com.craftworks.music.ui.screens.tv.settings.SettingsSwitchItem
 import kotlinx.coroutines.launch
 import java.io.File
 
-private enum class DialogStep { URL, CREDENTIALS }
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Preview(
-    showBackground = false, showSystemUi = true, device = "id:tv_1080p",
-    uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_TELEVISION,
-    wallpaper = Wallpapers.BLUE_DOMINATED_EXAMPLE
-)
+/**
+ * One screen, one action: the address and account are tested together and the server is saved as
+ * soon as it answers, so there is no hidden second step to get stuck on.
+ */
 @Composable
 fun CreateNavidromeProviderDialog(
     setShowDialog: (Boolean) -> Unit = { }
 ) {
-    var url: String by remember { mutableStateOf("") }
-    var username: String by remember { mutableStateOf("") }
-    var password: String by remember { mutableStateOf("") }
-    var allowCerts: Boolean by remember { mutableStateOf(false) }
+    var url by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var allowCerts by rememberSaveable { mutableStateOf(false) }
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+
+    var checking by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<ServerCheck?>(null) }
+    var missingUsername by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val dataSource = remember { NavidromeDataSource() }
+    val urlFocus = remember { FocusRequester() }
 
-    val backgroundColor = MaterialTheme.colorScheme.surface
+    fun submit() {
+        if (checking) return
+        missingUsername = false
+        val address = normalizeServerUrl(url)
+        if (address == null) {
+            result = ServerCheck.InvalidUrl
+            return
+        }
+        val account = username.trim()
+        if (account.isEmpty()) {
+            result = null
+            missingUsername = true
+            return
+        }
 
-    var step by remember { mutableStateOf(DialogStep.URL) }
-    val (nextFocus, loginFocus, addFocus) = remember { FocusRequester.createRefs() }
+        checking = true
+        result = null
+        coroutineScope.launch {
+            val server = NavidromeProvider(
+                id = "$address|$account",
+                url = address,
+                username = account,
+                password = password,
+                enabled = true,
+                allowSelfSignedCert = allowCerts
+            )
+            val check = dataSource.checkServer(server)
+            if (check == ServerCheck.Ok) {
+                // Finish saving even if the dialog is closed while the library list loads.
+                withContext(NonCancellable) {
+                    NavidromeManager.addServer(server)
+                    AppearanceSettingsManager(context).setUsername(account)
+                }
+                navidromeStatus.value = ""
+                setShowDialog(false)
+            } else {
+                result = check
+            }
+            checking = false
+        }
+    }
 
-    val textFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = MaterialTheme.colorScheme.primary,
-        unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        errorBorderColor = MaterialTheme.colorScheme.error,
-        cursorColor = MaterialTheme.colorScheme.primary,
-        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-        unfocusedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        errorTextColor = MaterialTheme.colorScheme.error
-    )
+    val message = when {
+        checking -> stringResource(R.string.Tv_Server_Connecting)
+        missingUsername -> stringResource(R.string.Tv_Server_Error_Username)
+        else -> result?.let { serverCheckMessage(it) }
+    }
+    val addressProblem = result != null && result != ServerCheck.WrongCredentials
+    val accountProblem = result == ServerCheck.WrongCredentials
 
     Dialog(
         onDismissRequest = { setShowDialog(false) },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-//        Text(
-//            text = stringResource(R.string.Settings_Header_Media),
-//            style = MaterialTheme.typography.titleLarge
-//        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawBehind { drawRect(color = backgroundColor) }
-                .padding(horizontal = 48.dp, vertical = 48.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.Top
-        ) {
-            AnimatedContent(
-                targetState = step,
+        AuroraBackdrop {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 56.dp, vertical = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(48.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .widthIn(max = 320.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    when (it) {
-                        DialogStep.URL -> {
-                            /* SERVER URL */
-                            OutlinedTextField(
-                                value = url,
-                                onValueChange = { url = it },
-                                label = {
-                                    Text(
-                                        text = stringResource(R.string.Label_Navidrome_URL),
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                },
-                                placeholder = {
-                                    Text(
-                                        text = "http://domain.tld:<port>",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                singleLine = true,
-                                isError = navidromeStatus.value == "Invalid URL",
-                                keyboardOptions = KeyboardOptions.Default.copy(
-                                    keyboardType = KeyboardType.Uri,
-                                    imeAction = ImeAction.Next,
-                                    autoCorrectEnabled = false
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onNext = {
-                                        coroutineScope.launch {
-                                            val server = NavidromeProvider(
-                                                url,
-                                                url,
-                                                username,
-                                                password,
-                                                true,
-                                                allowCerts
-                                            )
-                                            getNavidromeStatus(server)
-                                            if (navidromeStatus.value.contains("Error 10")) {
-                                                navidromeStatus.value = ""
-                                                step = DialogStep.CREDENTIALS
-                                            }
-                                        }
-                                    }
-                                ),
-                                colors = textFieldColors
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                RoundedCornerShape(20.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = ImageVector.vectorResource(R.drawable.s_m_media_providers),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.Tv_Server_Title),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = stringResource(R.string.Tv_Server_Intro),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    listOf(
+                        R.string.Tv_Server_Tip_Address,
+                        R.string.Tv_Server_Tip_Keyboard,
+                        R.string.Tv_Server_Tip_Network
+                    ).forEach { tip ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(
+                                Modifier
+                                    .padding(top = 7.dp)
+                                    .size(6.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
                             )
-
-                            /* Allow Self Signed Certs */
-                            SettingsSwitchItem(
-                                title = stringResource(R.string.Label_Allow_Self_Signed_Certs),
-                                checked = allowCerts,
-                                onCheckedChange = {
-                                    allowCerts = it
-                                }
+                            Text(
+                                text = stringResource(tip),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-
-                            if (navidromeStatus.value.isNotEmpty() && !navidromeStatus.value.contains(
-                                    "Error 10"
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .animateContentSize(),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = "Status: ${navidromeStatus.value}",
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                                        color = MaterialTheme.colorScheme.onBackground,
-                                        modifier = Modifier.padding(vertical = 6.dp)
-                                    )
-                                }
-                            }
-
-                            ListItem(
-                                selected = false,
-                                headlineContent = { Text(stringResource(R.string.Action_Done)) },
-                                modifier = Modifier.focusRequester(nextFocus),
-                                onClick = {
-                                    coroutineScope.launch {
-                                        val server = NavidromeProvider(
-                                            url,
-                                            url,
-                                            "",
-                                            "",
-                                            true,
-                                            allowCerts
-                                        )
-                                        getNavidromeStatus(server)
-                                        if (navidromeStatus.value.contains("Error 10")) {
-                                            navidromeStatus.value = ""
-                                            step = DialogStep.CREDENTIALS
-                                        }
-                                    }
-                                }
-                            )
-                        }
-
-                        DialogStep.CREDENTIALS -> {
-                            val (usernameFocus, passwordFocus) = remember { FocusRequester.createRefs() }
-
-                            /* USERNAME */
-                            OutlinedTextField(
-                                value = username,
-                                onValueChange = { username = it },
-                                label = {
-                                    Text(
-                                        text = stringResource(R.string.Label_Navidrome_Username),
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                },
-                                singleLine = true,
-                                isError = navidromeStatus.value.contains("40"),
-                                modifier = Modifier.focusRequester(usernameFocus),
-                                keyboardOptions = KeyboardOptions.Default.copy(
-                                    keyboardType = KeyboardType.Text,
-                                    imeAction = ImeAction.Next,
-                                    autoCorrectEnabled = false
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onNext = {
-                                        passwordFocus.requestFocus()
-                                    }
-                                ),
-                                colors = textFieldColors
-                            )
-
-                            /* PASSWORD */
-                            var passwordVisible by remember { mutableStateOf(false) }
-                            OutlinedTextField(
-                                value = password,
-                                onValueChange = { password = it },
-                                label = {
-                                    Text(
-                                        text = stringResource(R.string.Label_Navidrome_Password),
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                },
-                                singleLine = true,
-                                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-//                                trailingIcon = {
-//                                    val image = if (passwordVisible)
-//                                        R.drawable.round_visibility_24
-//                                    else
-//                                        R.drawable.round_visibility_off_24
-//
-//                                    val description =
-//                                        if (passwordVisible) "Hide password" else "Show password"
-//
-//                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-//                                        Icon(
-//                                            imageVector = ImageVector.vectorResource(id = image),
-//                                            description
-//                                        )
-//                                    }
-//                                },
-                                isError = navidromeStatus.value.contains("40"),
-                                modifier = Modifier.focusRequester(passwordFocus),
-                                keyboardOptions = KeyboardOptions.Default.copy(
-                                    keyboardType = KeyboardType.Password,
-                                    imeAction = ImeAction.Go,
-                                    autoCorrectEnabled = false
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onGo = {
-                                        coroutineScope.launch {
-                                            val server = NavidromeProvider(
-                                                url,
-                                                url,
-                                                username,
-                                                password,
-                                                true,
-                                                allowCerts
-                                            )
-                                            getNavidromeStatus(server)
-                                            if (navidromeStatus.value == "ok")
-                                                addFocus.requestFocus()
-                                        }
-                                    }
-                                ),
-                                colors = textFieldColors
-                            )
-
-                            if (navidromeStatus.value.isNotEmpty() && navidromeStatus.value != "ok") {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .animateContentSize(),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = "Status: ${navidromeStatus.value}",
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                                        color = MaterialTheme.colorScheme.onBackground,
-                                        modifier = Modifier.padding(vertical = 6.dp)
-                                    )
-                                }
-                            }
                         }
                     }
-
-                    CarouselDefaults.IndicatorRow(
-                        itemCount = 2,
-                        activeItemIndex = step.ordinal,
-                        modifier = Modifier.padding(16.dp),
-                    )
                 }
-            }
 
-            AnimatedVisibility(
-                visible = step == DialogStep.CREDENTIALS,
-                modifier = Modifier.widthIn(max = 320.dp)
-            ) {
                 Column(
+                    modifier = Modifier
+                        .width(420.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                            RoundedCornerShape(24.dp)
+                        )
+                        .padding(20.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ListItem(
-                        selected = false,
-                        headlineContent = { Text(stringResource(R.string.Action_Login)) },
-                        leadingContent = {
-                            Icon(
-                                imageVector = Icons.Rounded.AccountCircle,
-                                contentDescription = stringResource(R.string.Action_Login),
-                            )
-                        },
-                        modifier = Modifier.focusRequester(loginFocus),
-                        onClick = {
-                            coroutineScope.launch {
-                                val server = NavidromeProvider(
-                                    url,
-                                    url,
-                                    username,
-                                    password,
-                                    true,
-                                    allowCerts
-                                )
-                                getNavidromeStatus(server)
-                                if (navidromeStatus.value == "ok")
-                                    addFocus.requestFocus()
-                            }
-                        }
+                    ServerField(
+                        value = url,
+                        onValueChange = { url = it },
+                        label = stringResource(R.string.Tv_Server_Address),
+                        placeholder = "192.168.1.10:4533",
+                        isError = addressProblem,
+                        keyboardType = KeyboardType.Uri,
+                        imeAction = ImeAction.Next,
+                        onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                        modifier = Modifier.focusRequester(urlFocus)
+                    )
+                    ServerField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = stringResource(R.string.Tv_Server_Account),
+                        isError = accountProblem || missingUsername,
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next,
+                        onImeAction = { focusManager.moveFocus(FocusDirection.Down) }
+                    )
+                    ServerField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = stringResource(R.string.Tv_Server_Password),
+                        isError = accountProblem,
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
+                        onImeAction = { submit() },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation()
                     )
 
-                    ListItem(
-                        selected = false,
-                        enabled = navidromeStatus.value == "ok",
-                        headlineContent = { Text(stringResource(R.string.Action_Add)) },
-                        leadingContent = {
-                            Icon(
-                                imageVector = Icons.Rounded.Add,
-                                contentDescription = stringResource(R.string.Action_Login),
-                            )
-                        },
-                        modifier = Modifier.focusRequester(addFocus),
-                        onClick = {
-                            coroutineScope.launch {
-                                val server = NavidromeProvider(
-                                    url,
-                                    url,
-                                    username,
-                                    password,
-                                    true,
-                                    allowCerts
-                                )
-                                NavidromeManager.addServer(server)
-                                AppearanceSettingsManager(context).setUsername(username)
-                                navidromeStatus.value = ""
-                                setShowDialog(false)
-                            }
-                        }
+                    SettingsSwitchItem(
+                        title = stringResource(R.string.Tv_Server_Show_Password),
+                        checked = passwordVisible,
+                        onCheckedChange = { passwordVisible = it }
+                    )
+                    SettingsSwitchItem(
+                        title = stringResource(R.string.Label_Allow_Self_Signed_Certs),
+                        checked = allowCerts,
+                        onCheckedChange = { allowCerts = it }
                     )
 
+                    if (message != null) {
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (checking) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+                    ) {
+                        OutlinedButton(onClick = { setShowDialog(false) }) {
+                            Text(stringResource(R.string.Action_Cancel))
+                        }
+                        Button(
+                            onClick = { submit() },
+                            enabled = !checking
+                        ) {
+                            Text(stringResource(R.string.Tv_Server_Connect))
+                        }
+                    }
                 }
             }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        runCatching { urlFocus.requestFocus() }
+    }
+}
+
+@Composable
+private fun ServerField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    isError: Boolean,
+    keyboardType: KeyboardType,
+    imeAction: ImeAction,
+    onImeAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth(),
+        label = { androidx.compose.material3.Text(label) },
+        placeholder = placeholder?.let { { androidx.compose.material3.Text(it) } },
+        singleLine = true,
+        isError = isError,
+        visualTransformation = visualTransformation,
+        keyboardOptions = KeyboardOptions.Default.copy(
+            keyboardType = keyboardType,
+            imeAction = imeAction,
+            autoCorrectEnabled = false
+        ),
+        keyboardActions = KeyboardActions(onAny = { onImeAction() }),
+        shape = RoundedCornerShape(14.dp)
+    )
+}
+
+@Composable
+private fun serverCheckMessage(check: ServerCheck): String? = when (check) {
+    ServerCheck.Ok -> null
+    ServerCheck.InvalidUrl -> stringResource(R.string.Tv_Server_Error_Url)
+    ServerCheck.WrongCredentials -> stringResource(R.string.Tv_Server_Error_Credentials)
+    ServerCheck.NotSubsonic -> stringResource(R.string.Tv_Server_Error_NotSubsonic)
+    is ServerCheck.Http -> stringResource(R.string.Tv_Server_Error_Http, check.status)
+    is ServerCheck.ServerError -> stringResource(R.string.Tv_Server_Error_Server, check.message, check.code)
+    is ServerCheck.Network -> when (check.kind) {
+        NetworkFailure.UNKNOWN_HOST -> stringResource(R.string.Tv_Server_Error_UnknownHost)
+        NetworkFailure.UNREACHABLE -> stringResource(R.string.Tv_Server_Error_Unreachable)
+        NetworkFailure.TIMEOUT -> stringResource(R.string.Tv_Server_Error_Timeout)
+        NetworkFailure.TLS -> stringResource(R.string.Tv_Server_Error_Tls)
+        NetworkFailure.CLEARTEXT_BLOCKED -> stringResource(R.string.Tv_Server_Error_Cleartext)
+        NetworkFailure.OTHER -> stringResource(R.string.Tv_Server_Error_Other, check.detail)
     }
 }
 
@@ -470,7 +418,7 @@ fun CreateLocalProviderDialog(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .drawBehind { drawRect(color = backgroundColor) }
+                .auroraBackground()
                 .padding(horizontal = 48.dp, vertical = 24.dp)
                 .focusGroup(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -627,7 +575,7 @@ fun ModifyLrcLibProviderDialog(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .drawBehind { drawRect(color = backgroundColor) }
+                .auroraBackground()
                 .padding(horizontal = 48.dp, vertical = 48.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.Top

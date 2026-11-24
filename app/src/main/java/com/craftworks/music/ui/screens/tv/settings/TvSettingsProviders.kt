@@ -1,5 +1,6 @@
 package com.craftworks.music.ui.screens.tv.settings
 
+import com.craftworks.music.ui.elements.tv.TvScreenTitle
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -61,8 +62,12 @@ fun TvS_ProviderScreen() {
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 48.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        TvScreenTitle(
+            title = stringResource(R.string.Settings_Header_Media),
+            subtitle = stringResource(R.string.Tv_Providers_Hint)
+        )
         ListItem(selected=false,onClick={context.startActivity(android.content.Intent(context,com.craftworks.music.LocalLibraryActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))},headlineContent={Text("本地音乐 / U盘与来源清理")},supportingContent={Text("选择文件夹、仅本地播放、重新扫描、清理失联歌曲")})
         TabRow(
             modifier = Modifier.fillMaxWidth().focusGroup().focusRestorer(),

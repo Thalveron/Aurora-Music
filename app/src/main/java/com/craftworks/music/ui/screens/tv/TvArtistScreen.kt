@@ -1,5 +1,6 @@
 package com.craftworks.music.ui.screens.tv
 
+import com.craftworks.music.ui.elements.tv.TvScreenTitle
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -78,6 +79,9 @@ fun TvArtistScreen(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            TvScreenTitle(title = stringResource(R.string.Artists))
+        }
         item(span = { GridItemSpan(5) }) {
             TabRow(
                 selectedTabIndex = selectedTabIndex,

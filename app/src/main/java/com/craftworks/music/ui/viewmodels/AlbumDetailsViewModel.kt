@@ -33,7 +33,10 @@ class AlbumDetailsViewModel @Inject constructor(
                 }
             }
 
-            _songsInAlbum.value = albumRepository.getAlbum(albumId) ?: listOf(MediaItem.EMPTY)
+            // An empty answer means the album could not be loaded; without a placeholder the
+            // screen would show its spinner forever.
+            _songsInAlbum.value = albumRepository.getAlbum(albumId).orEmpty()
+                .ifEmpty { listOf(MediaItem.EMPTY) }
 
             loadingJob.cancel()
             _isLoading.value = false

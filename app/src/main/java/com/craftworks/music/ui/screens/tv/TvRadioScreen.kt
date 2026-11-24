@@ -1,5 +1,7 @@
 package com.craftworks.music.ui.screens.tv
 
+import com.craftworks.music.ui.elements.tv.TvScreenTitle
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -77,6 +79,9 @@ fun TvRadioScreen(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            TvScreenTitle(title = stringResource(R.string.radios))
+        }
         items(radios) { radio ->
             TvRadioCard (
                 radio = radio,
@@ -100,7 +105,6 @@ fun TvRadioScreen(
         }
         item {
             StandardCardContainer(
-                modifier = Modifier.width(128.dp),
                 imageCard = {
                     Card(
                         onClick = {

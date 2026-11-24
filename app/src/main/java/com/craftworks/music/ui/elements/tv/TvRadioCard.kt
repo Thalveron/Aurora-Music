@@ -31,16 +31,20 @@ fun TvRadioCard(
 ) {
     val radioName = radio.mediaMetadata.station?.toString() ?: ""
     StandardCardContainer(
-        modifier = modifier.width(128.dp),
+        modifier = modifier,
         imageCard = {
             Card(
                 onClick = onClick,
                 onLongClick = { onLongClick(radio) },
                 interactionSource = it,
+                shape = tvCardShape(),
+                border = tvCardBorder(),
+                scale = tvCardScale(),
+                glow = tvCardGlow(),
                 content = {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(("android.resource://com.craftworks.music/" + R.drawable.radioplaceholder).toUri())
+                            .data(("android.resource://${com.craftworks.music.updates.MusicUpdateRules.PACKAGE}/" + R.drawable.radioplaceholder).toUri())
                             .crossfade(true).build(),
                         fallback = painterResource(R.drawable.placeholder),
                         contentDescription = null,

@@ -1,5 +1,8 @@
 package com.craftworks.music.ui.elements.tv
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import android.util.Log
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -115,6 +118,7 @@ fun NavidromeProviderCard(
     val checked by remember { derivedStateOf { server.id == currentServerId } }
 
     val (mainFocus, librariesFocus) = remember { FocusRequester.createRefs() }
+    var confirmRemoval by remember { mutableStateOf(false) }
 
     ListItem(
         modifier = Modifier
@@ -209,11 +213,21 @@ fun NavidromeProviderCard(
             }
             Log.d("NAVIDROME", "Navidrome Current Server: ${server.id}")
         },
-        onLongClick = {
-            NavidromeManager.removeServer(server.id)
-            DataRefreshManager.notifyDataSourcesChanged()
-        }
+        onLongClick = { confirmRemoval = true }
     )
+
+    if (confirmRemoval) {
+        TvConfirmDialog(
+            title = stringResource(R.string.Tv_Remove_Server_Title),
+            message = stringResource(R.string.Tv_Remove_Server_Message, server.url),
+            confirmLabel = stringResource(R.string.Action_Remove),
+            onConfirm = {
+                NavidromeManager.removeServer(server.id)
+                DataRefreshManager.notifyDataSourcesChanged()
+            },
+            onDismiss = { confirmRemoval = false }
+        )
+    }
 }
 
 @Preview

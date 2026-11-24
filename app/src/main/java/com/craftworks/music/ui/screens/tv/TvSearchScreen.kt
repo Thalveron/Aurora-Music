@@ -1,5 +1,6 @@
 package com.craftworks.music.ui.screens.tv
 
+import com.craftworks.music.ui.elements.tv.TvScreenTitle
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -125,10 +126,14 @@ fun TvSearchScreen(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            TvScreenTitle(title = stringResource(R.string.Action_Search))
+        }
         item(
             span = { GridItemSpan(5) }
         ) {
             TextField(
+                modifier = Modifier.fillMaxWidth(),
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),

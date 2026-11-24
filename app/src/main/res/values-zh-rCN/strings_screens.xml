@@ -1,4 +1,11 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    
-    </resources>
+    <string name="welcome_text">欢迎</string>
+    <string name="recently_added">最近添加</string>
+    <string name="most_played">最常播放</string>
+    <string name="recently_played">最近播放</string>
+    <string name="random_songs">从曲库中探索</string>
+    <string name="Screen_Discography">全部作品</string>
+    <string name="Screen_Top_Songs">热门歌曲</string>
+    <string name="Album_Disc_Number">碟片 </string>
+</resources>

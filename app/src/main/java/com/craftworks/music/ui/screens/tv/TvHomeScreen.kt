@@ -47,6 +47,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.craftworks.music.managers.LocalProviderManager
+import com.craftworks.music.managers.NavidromeManager
+import com.craftworks.music.ui.elements.tv.TvDimens
+import com.craftworks.music.ui.elements.tv.TvEmptyState
+import com.craftworks.music.ui.elements.tv.TvScreenTitle
+import java.util.Calendar
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
@@ -95,12 +104,16 @@ fun TvHomeScreen(
 ) {
     val context = LocalContext.current
 
-    //val libraries by NavidromeManager.libraries.collectAsStateWithLifecycle()
-
     val recentlyPlayedAlbums by viewModel.recentlyPlayedAlbums.collectAsStateWithLifecycle()
     val recentAlbums by viewModel.recentAlbums.collectAsStateWithLifecycle()
     val mostPlayedAlbums by viewModel.mostPlayedAlbums.collectAsStateWithLifecycle()
     val shuffledAlbums by viewModel.shuffledAlbums.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+
+    val servers by NavidromeManager.allServers.collectAsStateWithLifecycle()
+    val folders by LocalProviderManager.allFolders.collectAsStateWithLifecycle()
+    val hasSources = servers.isNotEmpty() || folders.isNotEmpty() ||
+            LocalProviderManager.getAllFolders().isNotEmpty()
 
     val orderedHomeItems = AppearanceSettingsManager(context).homeItemsItemsFlow.collectAsState(
         initial = listOf(
@@ -118,11 +131,32 @@ fun TvHomeScreen(
         )
     }
 
+    val rows = orderedHomeItems.filter { it.enabled }.mapNotNull { item ->
+        val albums = when (item.key) {
+            "recently_played" -> recentlyPlayedAlbums
+            "recently_added" -> recentAlbums
+            "most_played" -> mostPlayedAlbums
+            else -> emptyList()
+        }
+        // Local and server libraries can report the same album; lazy rows need unique keys.
+        if (albums.isEmpty()) null else item.key to albums.distinctBy { it.mediaId }
+    }
+    val isEmpty = shuffledAlbums.isEmpty() && rows.isEmpty()
+
+    val greeting = remember {
+        when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
+            in 5..11 -> R.string.Tv_Greeting_Morning
+            in 12..17 -> R.string.Tv_Greeting_Afternoon
+            in 18..22 -> R.string.Tv_Greeting_Evening
+            else -> R.string.Tv_Greeting_Night
+        }
+    }
 
     val focusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+    // Content arrives after the first frame; claim focus again once there is something to focus.
+    LaunchedEffect(isEmpty) {
+        runCatching { focusRequester.requestFocus() }
     }
 
     val columnState = rememberLazyListState()
@@ -134,126 +168,138 @@ fun TvHomeScreen(
             .focusGroup()
             .focusRequester(focusRequester)
             .focusRestorer(focusRequester),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        contentPadding = PaddingValues(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        /*
-        item (key = "libraries") {
-            if (libraries.size > 1) {
-                libraries.forEach { (library, isSelected) ->
-                    FilterChip(
-                        onClick = {
-                            NavidromeManager.currentServerId.value?.let { serverId ->
-                                NavidromeManager.toggleServerLibraryEnabled(
-                                    serverId,
-                                    library.id,
-                                    !isSelected
-                                )
-                            }
-                        },
-                        content = {
-                            Text(library.name)
-                        },
-                        selected = isSelected,
-                        leadingIcon = if (isSelected) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Filled.Done,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(FilterChipDefaults.IconSize)
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                        modifier = Modifier.padding(end = 8.dp)
+        item(key = "header") {
+            TvScreenTitle(
+                title = stringResource(greeting),
+                subtitle = stringResource(R.string.Tv_Home_Subtitle),
+                modifier = Modifier.padding(
+                    start = TvDimens.ScreenPadding,
+                    end = TvDimens.ScreenPadding,
+                    top = 28.dp
+                )
+            )
+        }
+
+        if (isEmpty) {
+            item(key = "empty") {
+                if (isLoading && hasSources) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(280.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.Tv_Loading),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    TvEmptyState(
+                        icon = ImageVector.vectorResource(R.drawable.rounded_library_music_24),
+                        title = stringResource(R.string.Tv_Home_Empty_Title),
+                        message = stringResource(
+                            if (hasSources) R.string.Tv_Home_Empty_NoContent
+                            else R.string.Tv_Home_Empty_NoSource
+                        ),
+                        actionLabel = stringResource(
+                            if (hasSources) R.string.Tv_Action_Retry
+                            else R.string.Tv_Action_Add_Source
+                        ),
+                        onAction = {
+                            if (hasSources)
+                                viewModel.loadHomeScreenData()
+                            else
+                                navHostController.navigate(Screen.S_Providers.route) {
+                                    launchSingleTop = true
+                                }
+                        }
                     )
                 }
             }
         }
-        */
 
-        item (key = "carousel") {
-            val carouselState = rememberCarouselState()
-            var carouselFocused by remember { mutableStateOf(false) }
-            val coroutineScope = rememberCoroutineScope()
+        if (shuffledAlbums.isNotEmpty()) {
+            item(key = "carousel") {
+                val carouselState = rememberCarouselState()
+                var carouselFocused by remember { mutableStateOf(false) }
+                val coroutineScope = rememberCoroutineScope()
 
-            Carousel(
-                itemCount = shuffledAlbums.size,
-                modifier = Modifier
-                    .height(320.dp)
-                    .fillMaxWidth()
-                    .padding(horizontal = 48.dp)
-                    .padding(top = 24.dp)
-                    .clip(MaterialTheme.shapes.large)
-                    .onFocusChanged {
-                        carouselFocused = it.isFocused
-                    },
-                carouselState = carouselState,
-                contentTransformEndToStart =
-                    fadeIn(tween(600)).togetherWith(fadeOut(tween(600))),
-                contentTransformStartToEnd =
-                    fadeIn(tween(600)).togetherWith(fadeOut(tween(600)))
-            ) { itemIndex ->
-                val album = shuffledAlbums[itemIndex]
-                CarouselItem(
-                    album = album,
-                    carouselFocused = carouselFocused,
-                    modifier = Modifier.animateEnterExit(
-                        enter = slideInHorizontally(animationSpec = tween(1000)) { it / 16 },
-                        exit = slideOutHorizontally(animationSpec = tween(1000)) { -it / 16 }
-                    ),
-                    onPlay = {
-                        coroutineScope.launch {
-                            val mediaItems = viewModel.getAlbumSongs(
-                                album.mediaMetadata.extras?.getString("navidromeID") ?: ""
-                            )
-                            if (mediaItems.size > 1)
-                                SongHelper.play(
-                                    mediaItems = mediaItems.subList(1, mediaItems.size),
-                                    index = 0,
-                                    mediaController = mediaController
-                                )
-                            navHostController.navigate(Screen.NowPlayingLandscape.route) {
-                                launchSingleTop = true
+                Carousel(
+                    itemCount = shuffledAlbums.size,
+                    modifier = Modifier
+                        .height(280.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = TvDimens.ScreenPadding)
+                        .clip(RoundedCornerShape(28.dp))
+                        .onFocusChanged {
+                            carouselFocused = it.isFocused
+                        },
+                    carouselState = carouselState,
+                    contentTransformEndToStart =
+                        fadeIn(tween(600)).togetherWith(fadeOut(tween(600))),
+                    contentTransformStartToEnd =
+                        fadeIn(tween(600)).togetherWith(fadeOut(tween(600)))
+                ) { itemIndex ->
+                    // The list can shrink while the carousel still holds an old index.
+                    val album = shuffledAlbums.getOrNull(itemIndex) ?: return@Carousel
+                    CarouselItem(
+                        album = album,
+                        carouselFocused = carouselFocused,
+                        modifier = Modifier.animateEnterExit(
+                            enter = slideInHorizontally(animationSpec = tween(1000)) { it / 16 },
+                            exit = slideOutHorizontally(animationSpec = tween(1000)) { -it / 16 }
+                        ),
+                        onPlay = {
+                            coroutineScope.launch {
+                                // The first entry describes the album itself.
+                                val songs = viewModel.getAlbumSongs(
+                                    album.mediaMetadata.extras?.getString("navidromeID") ?: ""
+                                ).drop(1)
+                                if (songs.isNotEmpty()) {
+                                    SongHelper.play(
+                                        mediaItems = songs,
+                                        index = 0,
+                                        mediaController = mediaController
+                                    )
+                                    navHostController.navigate(Screen.NowPlayingLandscape.route) {
+                                        launchSingleTop = true
+                                    }
+                                }
                             }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
 
-        items(
-            orderedHomeItems.filter { it.enabled },
-            key = { it.key }
-        ) { item ->
-            val albums = when (item.key) {
-                "recently_played" -> recentlyPlayedAlbums
-                "recently_added" -> recentAlbums
-                "most_played" -> mostPlayedAlbums
-                else -> emptyList()
-            }
-            if (albums.isEmpty()) return@items
-
-            Column (
+        items(rows, key = { it.first }) { (key, albums) ->
+            Column(
                 Modifier.focusGroup()
             ) {
                 Text(
-                    text = stringResource(titleMap[item.key] ?: R.string.recently_played),
-                    style = MaterialTheme.typography.headlineSmall,
+                    text = stringResource(titleMap[key] ?: R.string.recently_played),
+                    style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 48.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = TvDimens.ScreenPadding)
                 )
 
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
                     modifier = Modifier
                         .focusGroup(),
-                    contentPadding = PaddingValues(horizontal = 48.dp)
+                    // Vertical room keeps the focused card's scale and glow from being clipped.
+                    contentPadding = PaddingValues(horizontal = TvDimens.ScreenPadding, vertical = 14.dp)
                 ) {
-                    items(albums, key = {it.mediaId} ) { album ->
+                    items(albums, key = { it.mediaId }) { album ->
                         TvAlbumCard(
                             album = album,
+                            modifier = Modifier.width(TvDimens.RowCardWidth),
                             onClick = {
                                 val albumEncoded = album.toAlbum()
                                 val encodedImage = URLEncoder.encode(albumEncoded.coverArt, "UTF-8")
@@ -371,7 +417,7 @@ private fun CarouselItem(
             modifier = modifier
                 .fillMaxHeight()
                 .width(484.dp)
-                .padding(32.dp),
+                .padding(horizontal = 36.dp, vertical = 28.dp),
             verticalArrangement = Arrangement.Bottom
         ) {
             if (subtitle.isNotBlank()) {

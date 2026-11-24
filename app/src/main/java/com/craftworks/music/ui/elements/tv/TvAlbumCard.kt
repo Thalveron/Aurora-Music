@@ -13,6 +13,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
 import androidx.tv.material3.Card
+import androidx.tv.material3.MaterialTheme
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.StandardCardContainer
 import androidx.tv.material3.Text
@@ -31,20 +33,28 @@ fun TvAlbumCard(
     val artistName = album.mediaMetadata.artist?.toString() ?: ""
     val coverArtUrl = album.mediaMetadata.artworkUri
     StandardCardContainer(
-        modifier = modifier.width(128.dp),
+        modifier = modifier,
         imageCard = {
             Card(
-                onClick = onClick, interactionSource = it, content = {
+                onClick = onClick,
+                interactionSource = it,
+                shape = tvCardShape(),
+                border = tvCardBorder(),
+                scale = tvCardScale(),
+                glow = tvCardGlow(),
+                content = {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(coverArtUrl)
                             .diskCacheKey(album.mediaMetadata.extras?.getString("navidromeID"))
                             .crossfade(true)
                             .build(),
+                        placeholder = painterResource(R.drawable.placeholder),
+                        error = painterResource(R.drawable.placeholder),
                         fallback = painterResource(R.drawable.placeholder),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().aspectRatio(1f)
+                        modifier = Modifier.fillMaxWidth().aspectRatio(1f)
                     )
                 }
             )
@@ -60,6 +70,7 @@ fun TvAlbumCard(
         subtitle = {
             Text(
                 text = artistName,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

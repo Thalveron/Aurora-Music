@@ -4,6 +4,7 @@
     <string name="Action_Done">Done</string>
     <string name="Action_Remove">Remove</string>
     <string name="Action_Reset">Reset</string>
+    <string name="Action_Cancel">Cancel</string>
 
     <string name="Action_Search">Search</string>
 

@@ -1,5 +1,12 @@
 package com.craftworks.music.ui.screens.tv
 
+import com.craftworks.music.ui.elements.tv.TvScreenTitle
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import com.craftworks.music.ui.elements.tv.TvEmptyState
+import com.craftworks.music.ui.elements.tv.TvConfirmDialog
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.runtime.mutableStateOf
 import android.os.Bundle
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +58,7 @@ fun TvPlaylistScreen(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
     val focusRequester = remember { FocusRequester() }
+    var playlistToDelete by remember { mutableStateOf<MediaItem?>(null) }
 
     LaunchedEffect(Unit, playlists) {
         focusRequester.requestFocus()
@@ -67,6 +75,18 @@ fun TvPlaylistScreen(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            TvScreenTitle(title = stringResource(R.string.playlists))
+        }
+        if (playlists.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                TvEmptyState(
+                    icon = ImageVector.vectorResource(R.drawable.rounded_queue_music_24),
+                    title = stringResource(R.string.Tv_Empty_List_Title),
+                    message = stringResource(R.string.Tv_Empty_List_Message)
+                )
+            }
+        }
         items(playlists) { playlist ->
             TvPlaylistCard (
                 playlist = playlist,
@@ -76,10 +96,21 @@ fun TvPlaylistScreen(
                         launchSingleTop = true
                     }
                 },
-                onLongClick = {
-                    viewModel.deletePlaylist(playlist.mediaMetadata.extras?.getString("navidromeID") ?: "")
-                }
+                onLongClick = { playlistToDelete = playlist }
             )
         }
+    }
+
+    playlistToDelete?.let { playlist ->
+        TvConfirmDialog(
+            title = stringResource(R.string.Dialog_Delete_Playlist),
+            message = (playlist.mediaMetadata.title?.toString() ?: "") + "\n" +
+                    stringResource(R.string.Label_Confirm_Delete_Playlist),
+            confirmLabel = stringResource(R.string.Action_Remove),
+            onConfirm = {
+                viewModel.deletePlaylist(playlist.mediaMetadata.extras?.getString("navidromeID") ?: "")
+            },
+            onDismiss = { playlistToDelete = null }
+        )
     }
 }
