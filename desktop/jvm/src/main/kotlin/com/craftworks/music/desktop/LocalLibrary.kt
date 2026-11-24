@@ -77,7 +77,7 @@ internal class LocalTrack internal constructor(val file: Path, val song: MediaDa
 
 internal data class LocalScan(val tracks: List<LocalTrack> = emptyList(), val skipped: Int = 0)
 
-private val localFormats = setOf("mp3", "wav", "aif", "aiff", "m4a") + offlineFormats
+private val localFormats = setOf("mp3", "wav", "aif", "aiff", "m4a", "flac", "ogg", "opus", "alac", "wma")
 
 internal suspend fun scanLocalFolders(folders: List<Path>): LocalScan = withContext(Dispatchers.IO) {
     val context = coroutineContext

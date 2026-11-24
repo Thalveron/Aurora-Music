@@ -47,7 +47,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.WindowState
+import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.window.application
 import com.craftworks.music.data.model.Lyric
 import com.craftworks.music.data.model.MediaData
@@ -103,7 +103,6 @@ private fun DesktopApp(exit: () -> Unit) {
     var update by remember { mutableStateOf<Update?>(null) }
     var accelerated by remember { mutableStateOf(settings.accelerated) }
     var scrobblePercent by remember { mutableStateOf(settings.scrobblePercent) }
-    var maxBitRate by remember { mutableStateOf(settings.maxBitRate) }
     var songForPlaylist by remember { mutableStateOf<MediaData.Song?>(null) }
     var pendingDelete by remember { mutableStateOf<MediaData.Playlist?>(null) }
     var pendingRename by remember { mutableStateOf<MediaData.Playlist?>(null) }
@@ -140,7 +139,7 @@ private fun DesktopApp(exit: () -> Unit) {
     }
 
     fun serverTrack(active: SubsonicClient, song: MediaData.Song) =
-        QueueTrack(song, { player.play(active, song, maxBitRate) }, { loadLyrics(active, song) }, { active.scrobble(song.navidromeID, it) })
+        QueueTrack(song, { player.play(active, song) }, { loadLyrics(active, song) }, { active.scrobble(song.navidromeID, it) })
 
     fun disconnect() {
         player.stop()
@@ -255,7 +254,7 @@ private fun DesktopApp(exit: () -> Unit) {
         onCloseRequest = exit,
         title = "Aurora Music",
         icon = appIcon,
-        state = WindowState(width = 1120.dp, height = 760.dp),
+        state = rememberWindowState(width = 1120.dp, height = 760.dp),
     ) {
         MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xffaeb9ff), surface = Color(0xff202432))) {
             val activeServer = client
@@ -315,7 +314,7 @@ private fun DesktopApp(exit: () -> Unit) {
                             TextButton(enabled = !busy, onClick = { showSettings = false; localLibrary = true }) { Text(label("本地音乐", "Local music")) }
                             TextButton(enabled = !busy, onClick = { showSettings = true }) { Text(label("设置", "Settings")) }
                             Spacer(Modifier.weight(1f))
-                            Text("1.33.0 • dev", style = MaterialTheme.typography.labelSmall)
+                            Text(DESKTOP_VERSION, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                     Column(Modifier.weight(1f).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -358,16 +357,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                 }) { Text(label("清除背景", "Clear background")) }
                             }
                             Text(label("背景文件保留在本机；服务器密码仅在 Windows 上使用系统加密保存。", "Backgrounds stay on this device. Passwords are saved using Windows encryption."), style = MaterialTheme.typography.bodyMedium)
-                            Text(label("FLAC、OGG、Opus 等格式将请求服务器转码为 MP3。", "FLAC, OGG, Opus and similar formats request MP3 transcoding from the server."), style = MaterialTheme.typography.bodySmall)
-                            Text(label("服务器播放音质（下首生效）", "Streaming quality (next track)"))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                for (rate in listOf(0, 128, 192, 320)) androidx.compose.material3.FilterChip(
-                                    selected = maxBitRate == rate, onClick = {
-                                        maxBitRate = rate
-                                        try { settings.maxBitRate = rate; settings.flush() }
-                                        catch (e: IOException) { message = describeError(e, chinese) }
-                                    }, label = { Text(if (rate == 0) label("自动", "Auto") else "$rate kbps") })
-                            }
+                            Text(label("播放原始音频，不请求服务器转码或降低码率。", "Play original audio without server transcoding or bitrate limits."))
                             Text(label("向音乐服务器记录播放", "Report listening history to your music server"))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 for (threshold in listOf(0, 50, 70, 90)) androidx.compose.material3.FilterChip(
@@ -409,6 +399,7 @@ private fun DesktopApp(exit: () -> Unit) {
                                     message = ""
                                     scope.launch {
                                         try {
+                                            update = null
                                             update = withContext(Dispatchers.IO) { Updater().check() }
                                             message = update?.let { label("发现新版本 ", "Update available: ") + it.version }
                                                 ?: label("没有找到可验证的新版本", "No verifiable update found")
@@ -833,6 +824,7 @@ private fun describeError(error: Exception, chinese: Boolean): String {
         "Unable to remove server settings" -> "无法删除服务器设置"
         "Unable to decrypt saved credentials for this Windows user" -> "无法为当前 Windows 用户解密保存的密码"
         "Unable to reach the update server" -> "无法连接更新服务器"
+        "A different file already exists; choose another download folder" -> "已存在不同的同名文件，请选择其他下载文件夹"
         "Update integrity verification failed" -> "更新文件完整性校验失败"
         "Update exceeds expected size" -> "更新文件超过预期大小"
         "Invalid update metadata" -> "更新信息无效"

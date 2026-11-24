@@ -153,10 +153,9 @@ class SubsonicClient(
     fun plainLyrics(artist: String, title: String): String? =
         request("getLyrics", mapOf("artist" to artist, "title" to title)).lyrics?.value
 
-    internal fun streamUri(songId: String, transcode: Boolean = false, maxBitRate: Int = 0): URI {
+    internal fun streamUri(songId: String): URI {
         require(songId.isNotBlank()) { "Song ID is required" }
-        val parameters = if (transcode) mapOf("id" to songId, "format" to "mp3") else mapOf("id" to songId)
-        return endpointUri("stream", if (maxBitRate > 0) parameters + ("maxBitRate" to "$maxBitRate") else parameters)
+        return endpointUri("stream", mapOf("id" to songId, "format" to "raw"))
     }
 
     internal fun endpointUri(endpoint: String, parameters: Map<String, String>): URI {

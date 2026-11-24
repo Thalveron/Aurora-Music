@@ -10,16 +10,10 @@ Java Native Access (JNA) is available under Apache License 2.0 or LGPL 2.1.
 This distribution uses it under Apache License 2.0. Its jars also contain the
 upstream license notice.
 
-OpenJFX 21.0.8 is licensed under GPL version 2 with the Classpath Exception.
-See javafx/LICENSE, javafx/ADDITIONAL_LICENSE_INFO and the accompanying
-third-party notices. The corresponding source is available at:
-https://github.com/openjdk/jfx21u/tree/21.0.8%2B2
-https://github.com/openjdk/jfx21u/archive/refs/tags/21.0.8%2B2.tar.gz
+Windows playback uses VideoLAN's libVLC 3.0.24 and its plugins.
+See vlc/COPYING.txt and vlc/AUTHORS.txt in the application resources.
+Corresponding source and dependency build recipes:
+https://download.videolan.org/pub/videolan/vlc/3.0.24/vlc-3.0.24.tar.xz
+https://code.videolan.org/videolan/vlc/-/tree/3.0.24/contrib/src
 
 The bundled Java runtime includes its own legal notices in its legal directory.
-
-The separate FFmpeg executable is supplied by JAVE2 nativebin 4.2.0
-(ws.schild:jave-nativebin-win64 for Windows). The artifact declares GPLv3.
-FFmpeg is copyright the FFmpeg developers and its third-party contributors.
-Upstream projects: https://ffmpeg.org/ and https://github.com/a-schild/jave2
-License: https://www.gnu.org/licenses/gpl-3.0.html

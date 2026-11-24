@@ -41,9 +41,6 @@ internal class DesktopSettings(
     var scrobblePercent: Int
         get() = preferences.getInt("scrobblePercent", 0)
         set(value) { preferences.putInt("scrobblePercent", value) }
-    var maxBitRate: Int
-        get() = preferences.getInt("maxBitRate", 0)
-        set(value) { preferences.putInt("maxBitRate", value) }
 
     fun flush() {
         try {

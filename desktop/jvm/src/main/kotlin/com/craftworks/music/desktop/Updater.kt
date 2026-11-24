@@ -15,6 +15,7 @@ import java.security.MessageDigest
 import java.time.Duration
 
 private const val REPOSITORY = "Thalveron/Aurora-Music"
+internal const val DESKTOP_VERSION = "1.33.1"
 private const val MAX_UPDATE_BYTES = 512L * 1024 * 1024
 private val tagPattern = Regex("^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$")
 private val digestPattern = Regex("^sha256:[0-9a-f]{64}$")
@@ -100,7 +101,7 @@ internal class Updater {
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15))
         .followRedirects(HttpClient.Redirect.NEVER).build()
 
-    fun check(): Update? {
+    fun check(current: String = DESKTOP_VERSION): Update? {
         var best: Update? = null
         var page = 1
         do {
@@ -109,7 +110,7 @@ internal class Updater {
                 if (response.statusCode() != 200) throw IOException("GitHub update metadata returned HTTP ${response.statusCode()}")
                 val bytes = body.readNBytes(4 * 1024 * 1024 + 1)
                 if (bytes.size > 4 * 1024 * 1024) throw IOException("Update metadata is too large")
-                selectUpdate(bytes.toString(Charsets.UTF_8), best?.version ?: "1.33.0")?.let { best = it }
+                selectUpdate(bytes.toString(Charsets.UTF_8), best?.version ?: current)?.let { best = it }
             }
             page++
         } while (response.headers().allValues("Link").any { "rel=\"next\"" in it })
@@ -124,6 +125,15 @@ internal class Updater {
             asset.url != "https://github.com/$REPOSITORY/releases/download/v${update.version}/$expectedName" ||
             asset.size !in 1..MAX_UPDATE_BYTES || asset.digest?.matches(digestPattern) != true) {
             throw IOException("Invalid update metadata")
+        }
+        val destination = directory.resolve(expectedName)
+        if (Files.exists(destination)) {
+            if (Files.isRegularFile(destination, java.nio.file.LinkOption.NOFOLLOW_LINKS) && Files.size(destination) == asset.size) {
+                val hash = MessageDigest.getInstance("SHA-256")
+                java.security.DigestInputStream(Files.newInputStream(destination), hash).use { it.transferTo(java.io.OutputStream.nullOutputStream()) }
+                if ("sha256:" + java.util.HexFormat.of().formatHex(hash.digest()) == asset.digest) return destination
+            }
+            throw IOException("A different file already exists; choose another download folder")
         }
         var uri = URI(if (accelerated) "https://gh-proxy.com/${asset.url}" else asset.url)
         var response: HttpResponse<java.io.InputStream>? = null
@@ -151,7 +161,7 @@ internal class Updater {
 
     private fun send(uri: URI): HttpResponse<java.io.InputStream> {
         val request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30))
-            .header("Accept", "application/vnd.github+json")
+            .header("Accept", if (uri.host == "api.github.com") "application/vnd.github+json" else "application/octet-stream")
             .header("User-Agent", "Aurora-Music-Desktop").GET().build()
         return try {
             http.send(request, HttpResponse.BodyHandlers.ofInputStream())

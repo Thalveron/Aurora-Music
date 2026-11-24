@@ -1,9 +1,10 @@
+import java.security.MessageDigest
+
 plugins {
     kotlin("jvm") version "2.3.21"
     kotlin("plugin.serialization") version "2.3.21"
     kotlin("plugin.compose") version "2.3.21"
     id("org.jetbrains.compose") version "1.10.3"
-    id("org.openjfx.javafxplugin") version "0.1.0"
 }
 
 kotlin {
@@ -43,20 +44,20 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
-val decoderBinary by configurations.creating
-val decoderPlatform = when {
-    System.getProperty("os.name").startsWith("Windows") -> "win64"
-    System.getProperty("os.name").startsWith("Mac") -> if (System.getProperty("os.arch") == "aarch64") "osxm1" else "osx64"
-    else -> if (System.getProperty("os.arch") == "aarch64") "linux-arm64" else "linux64"
-}
-dependencies { decoderBinary("ws.schild:jave-nativebin-$decoderPlatform:4.2.0@jar") }
+val vlcBinary by configurations.creating
+dependencies { vlcBinary("org.videolan:vlc:3.0.24@zip") }
 val prepareDistributionResources by tasks.registering(Sync::class) {
     from("src/main/app-resources")
-    from({ zipTree(decoderBinary.singleFile) }) {
-        include("**/ffmpeg-*")
-        eachFile { path = "common/decoder/" + if (decoderPlatform == "win64") "ffmpeg.exe" else "ffmpeg" }
+    if (System.getProperty("os.name").startsWith("Windows")) from({
+        val archive = vlcBinary.singleFile
+        check(MessageDigest.getInstance("SHA-256").digest(archive.readBytes()).joinToString("") { "%02x".format(it) } ==
+            "fcf30850371ad10c9373cc4f0f4501e7dee49e3e9ae9f20c72fb2661a1ca6323") { "Invalid VLC distribution digest" }
+        zipTree(archive)
+    }) {
+        include("*/libvlc*.dll", "*/plugins/**", "*/COPYING.txt", "*/AUTHORS.txt", "*/THANKS.txt")
+        exclude("**/plugins.dat")
+        eachFile { path = "common/vlc/" + path.substringAfter('/') }
         includeEmptyDirs = false
-        filePermissions { unix("755") }
     }
     into(layout.buildDirectory.dir("distribution-resources"))
     into("common/licenses/aurora") {
@@ -70,18 +71,13 @@ tasks.withType<Test>().configureEach {
     systemProperty("compose.application.resources.dir", layout.buildDirectory.dir("distribution-resources/common").get().asFile)
 }
 
-javafx {
-    version = "21.0.8"
-    modules = listOf("javafx.media", "javafx.swing")
-}
-
 compose.desktop {
     application {
         mainClass = "com.craftworks.music.desktop.MainKt"
         nativeDistributions {
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe)
             packageName = "Aurora Music"
-            packageVersion = "1.33.0"
+            packageVersion = "1.33.1"
             appResourcesRootDir.set(layout.buildDirectory.dir("distribution-resources"))
             modules("java.net.http", "java.prefs", "jdk.httpserver", "jdk.unsupported", "jdk.crypto.ec")
             windows {

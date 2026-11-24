@@ -39,7 +39,7 @@ internal fun PlayerPanel(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(current.song.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (lyric.isNotBlank()) Text(lyric, color = lyricColor, maxLines = 2)
+                    Text(lyric, color = lyricColor, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 TextButton({ showQueue = true }) { Text(tr("队列", "Queue") + " · ${queue.entries.size}") }
                 Box {
@@ -67,7 +67,7 @@ internal fun PlayerPanel(
                         dragging?.let { player.seek((it * playback.durationMs).toLong()) }
                         dragging = null
                     }, enabled = playback.durationMs > 0, modifier = Modifier.weight(1f))
-                Text(formatTime(playback.positionMs) + " / " + formatTime(playback.durationMs))
+                Text(formatTime(playback.positionMs) + " / " + formatTime(playback.durationMs), Modifier.width(110.dp), maxLines = 1)
                 Text(tr("音量", "Vol"), Modifier.padding(start = 12.dp))
                 Slider(volume, { volume = it; player.volume(it) }, modifier = Modifier.width(72.dp))
             }

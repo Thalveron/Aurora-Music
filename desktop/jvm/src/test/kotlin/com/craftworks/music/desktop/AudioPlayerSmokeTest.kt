@@ -25,6 +25,8 @@ class AudioPlayerSmokeTest {
         }.array()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/rest/stream.view") { exchange ->
+            assertTrue(exchange.requestURI.rawQuery.split("&").contains("format=raw"))
+            assertTrue(!exchange.requestURI.rawQuery.contains("maxBitRate"))
             val start = exchange.requestHeaders.getFirst("Range")?.substringAfter("bytes=")?.substringBefore("-")?.toIntOrNull() ?: 0
             exchange.responseHeaders.add("Content-Type", "audio/wav")
             exchange.responseHeaders.add("Accept-Ranges", "bytes")
@@ -38,7 +40,7 @@ class AudioPlayerSmokeTest {
         var player: AudioPlayer? = null
         try {
             SwingUtilities.invokeAndWait {
-                player = AudioPlayer { state ->
+                player = AudioPlayer(silentOutput = true) { state ->
                     if (state.playing) { played = true; finished.countDown() }
                     if (state.error) finished.countDown()
                 }

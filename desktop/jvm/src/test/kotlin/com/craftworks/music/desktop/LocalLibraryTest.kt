@@ -85,24 +85,25 @@ class LocalLibraryTest {
 
     }
 
-    @Test fun offlineDecoderProducesPlayableWaveForAllThreeFormats() = runBlocking {
-            val root = fixture.newFolder("offline").toPath().toRealPath()
-            for ((extension, codec) in mapOf("flac" to "flac", "ogg" to "libvorbis", "opus" to "libopus")) {
-                val process = ProcessBuilder(bundledDecoder().toString(), "-v", "error", "-f", "lavfi", "-i",
-                    "sine=frequency=440:duration=0.2", "-c:a", codec, root.resolve("fixture.$extension").toString())
-                    .redirectError(ProcessBuilder.Redirect.INHERIT).start()
-                assertEquals(0, process.waitFor())
+    @Test fun playsOriginalCompressedFilesWithoutConversion() = runBlocking {
+        org.junit.Assume.assumeTrue(System.getenv("AURORA_LOCAL_MEDIA_SMOKE_TEST") == "1")
+        val root = fixture.newFolder("offline").toPath().toRealPath()
+        for (ext in listOf("flac", "ogg", "opus")) {
+            javaClass.getResourceAsStream("/audio/tone.$ext")!!.use { Files.copy(it, root.resolve("tone.$ext")) }
+        }
+        val tracks = scanLocalFolders(listOf(root)).tracks
+        assertEquals(3, tracks.size)
+        for (track in tracks) {
+            val end = java.util.concurrent.CountDownLatch(1)
+            var advanced = false
+            val player = AudioPlayer(silentOutput = true) {
+                if (it.playing && it.positionMs > 0) advanced = true
+                if (it.error || it.ended) end.countDown()
             }
-            val tracks = scanLocalFolders(listOf(root)).tracks
-            assertEquals(3, tracks.size)
-            for (track in tracks) {
-                val wave = decodeLocal(track)
-                try {
-                    javax.sound.sampled.AudioSystem.getAudioInputStream(wave.toFile()).use {
-                        assertTrue(it.frameLength >= 8000)
-                        assertEquals(16, it.format.sampleSizeInBits)
-                    }
-                } finally { Files.delete(wave) }
+            try {
+                javax.swing.SwingUtilities.invokeAndWait { player.playLocal(track) }
+                assertTrue(track.song.format, end.await(12, java.util.concurrent.TimeUnit.SECONDS) && advanced)
+            } finally { player.close() }
         }
     }
 }

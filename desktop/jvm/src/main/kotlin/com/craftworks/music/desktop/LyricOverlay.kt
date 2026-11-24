@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
-import androidx.compose.ui.window.WindowState
+import androidx.compose.ui.window.rememberWindowState
 import com.sun.jna.Native
 import com.sun.jna.Platform
 import com.sun.jna.platform.win32.User32
@@ -30,7 +30,7 @@ internal fun LyricOverlay(text: String, color: Color, onError: (String) -> Unit,
     Window(
         onCloseRequest = onClose,
         title = "Aurora Music Lyrics",
-        state = WindowState(position = WindowPosition.Aligned(Alignment.BottomCenter), width = 900.dp, height = 110.dp),
+        state = rememberWindowState(position = WindowPosition.Aligned(Alignment.BottomCenter), width = 900.dp, height = 110.dp),
         undecorated = true,
         transparent = true,
         alwaysOnTop = true,

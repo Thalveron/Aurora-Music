@@ -33,7 +33,7 @@ class LocalPlaybackSmokeTest {
         var player: AudioPlayer? = null
         try {
             SwingUtilities.invokeAndWait {
-                player = AudioPlayer {
+                player = AudioPlayer(silentOutput = true) {
                     if (it.playing) playing = true
                     if (playing || it.error) finished.countDown()
                 }.also { it.playLocal(track) }
