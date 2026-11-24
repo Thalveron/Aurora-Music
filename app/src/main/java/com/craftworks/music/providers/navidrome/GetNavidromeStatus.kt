@@ -7,8 +7,6 @@ import com.craftworks.music.data.datasource.navidrome.NavidromeDataSource
 import com.craftworks.music.managers.NavidromeManager
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -29,13 +27,6 @@ suspend fun getNavidromeStatus(server: NavidromeProvider) {
         }
     }
 }
-
-@Serializable
-@SerialName("error")
-data class SubsonicError(
-    val code: Int,
-    val message: String
-)
 
 fun parseNavidromeStatus(
     response: String

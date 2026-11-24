@@ -32,7 +32,7 @@ sealed class MediaData {
         var timesPlayed: Int? = 0,
         val discNumber: Int? = 0,
         @SerialName("created")
-        val dateAdded: String,
+        val dateAdded: String = "",
         val albumId: String = "",
         val artistId: String? = "",
         val type: String? = "music",
@@ -67,7 +67,7 @@ sealed class MediaData {
 
         val isDir : Boolean? = false,
         var coverArt : String? = null,
-        val songCount : Int,
+        val songCount : Int = 0,
 
         val played : String? = "",
         val created : String? = "",
@@ -75,7 +75,7 @@ sealed class MediaData {
         val playCount : Int? = 0,
 
         val artistId : String? = null,
-        val artist : String,
+        val artist : String = "",
         val year : Int? = 0,
         val genre : String? = "",
         val genres : List<Genre>? = listOf(),
@@ -148,9 +148,9 @@ sealed class MediaData {
     data class StructuredLyrics(
         val displayArtist: String? = "",
         val displayTitle: String? = "",
-        val lang: String,
+        val lang: String = "",
         val offset: Int? = 0,
-        val synced: Boolean,
+        val synced: Boolean = false,
         val line: List<SyncedLyrics>
     ) : MediaData()
 }

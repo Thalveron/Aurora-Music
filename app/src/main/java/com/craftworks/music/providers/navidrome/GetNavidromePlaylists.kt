@@ -5,11 +5,6 @@ import com.craftworks.music.data.datasource.navidrome.NavidromeDataSource
 import com.craftworks.music.data.model.MediaData
 import com.craftworks.music.data.model.playlistList
 import com.craftworks.music.data.model.toMediaItem
-import kotlinx.serialization.Serializable
-
-@Serializable
-data class PlaylistContainer(val playlist: List<MediaData.Playlist>? = listOf())
-
 fun parseNavidromePlaylistsJSON(
     response: String,
     navidromeUrl: String,

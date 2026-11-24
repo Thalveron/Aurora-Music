@@ -1,36 +1,13 @@
 package com.craftworks.music.data.model
 
 import android.os.Bundle
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import kotlinx.serialization.Serializable
 import java.util.UUID
 
 var songsList: MutableList<MediaData.Song> = mutableStateListOf()
-
-@Immutable
-@Serializable
-data class Genre(
-    val name: String? = ""
-)
-
-@Immutable
-@Serializable
-data class ReplayGain(
-    val trackGain: Float? = 0f,
-    //val trackPeak: Float? = 0f,
-    //val albumPeak: Float? = 0f
-)
-
-@Immutable
-@Serializable
-data class Artists(
-    val id: String? = "",
-    val name: String? = ""
-)
 
 fun MediaData.Song.toMediaItem(): MediaItem {
     val storedMedia=this.media.orEmpty()

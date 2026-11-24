@@ -11,6 +11,7 @@ import com.craftworks.music.data.model.toLyric
 import com.craftworks.music.data.model.toLyrics
 import com.craftworks.music.managers.NavidromeManager
 import com.craftworks.music.providers.navidrome.navidromeStatus
+import com.craftworks.music.providers.navidrome.SubsonicAuth
 import com.craftworks.music.providers.navidrome.parseNavidromeAlbumJSON
 import com.craftworks.music.providers.navidrome.parseNavidromeAlbumListJSON
 import com.craftworks.music.providers.navidrome.parseNavidromeArtistAlbumsJSON
@@ -30,10 +31,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logger
-import io.ktor.client.plugins.logging.Logging
-import io.ktor.client.plugins.logging.SIMPLE
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.statement.HttpResponse
@@ -46,7 +43,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.net.ConnectException
 import java.nio.channels.UnresolvedAddressException
-import java.security.MessageDigest
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import javax.inject.Inject
@@ -64,26 +60,14 @@ class NavidromeDataSource @Inject constructor() {
                 json(json)
             }
             install(HttpCache)
-            install(Logging) {
-                level = LogLevel.ALL
-                logger = Logger.SIMPLE
-            }
         }
     }
 
     private val insecureClient: HttpClient by lazy { buildInsecureClient() }
 
     companion object {
-        fun md5Hash(input: String): String {
-            val md = MessageDigest.getInstance("MD5")
-            val hashBytes = md.digest(input.toByteArray())
-            return hashBytes.joinToString("") { "%02x".format(it) }
-        }
-
-        fun generateSalt(length: Int): String {
-            val allowedChars = ('a'..'z') + ('A'..'Z') + ('0'..'9')
-            return (1..length).map { allowedChars.random() }.joinToString("")
-        }
+        fun md5Hash(input: String): String = SubsonicAuth.md5Hash(input)
+        fun generateSalt(length: Int): String = SubsonicAuth.generateSalt(length)
     }
 
     private fun buildInsecureClient(): HttpClient {
@@ -110,10 +94,6 @@ class NavidromeDataSource @Inject constructor() {
                 json(json)
             }
             install(HttpCache)
-            install(Logging) {
-                level = LogLevel.ALL
-                logger = Logger.SIMPLE
-            }
         }
     }
 
@@ -153,7 +133,7 @@ class NavidromeDataSource @Inject constructor() {
             }
 
             if (response.status != HttpStatusCode.OK) {
-                Log.w("NAVIDROME", "HTTP ${response.status} for URL: $url")
+                Log.w("NAVIDROME", "Music server returned HTTP ${response.status}")
                 return@withContext emptyList()
             }
             val responseContent = response.bodyAsText()
@@ -187,14 +167,14 @@ class NavidromeDataSource @Inject constructor() {
                 endpoint.startsWith("getSimilarSongs") -> parsedData.addAll(parseNavidromeSimilarSongsJSON(responseContent, server.url, server.username, server.password))
             }
         } catch (e: UnresolvedAddressException) {
-            Log.e("NAVIDROME", "Network error for URL: $url", e)
+            Log.e("NAVIDROME", "Music server host could not be resolved")
             navidromeStatus.value = "Unknown host"
         }catch (e: ConnectException) {
-            Log.e("NAVIDROME", "Network error for URL: $url", e)
-            navidromeStatus.value = e.message.toString()
+            Log.e("NAVIDROME", "Could not connect to music server")
+            navidromeStatus.value = "Could not connect to music server"
         } catch (e: Exception) {
-            Log.e("NAVIDROME", "Network error for URL: $url", e)
-            navidromeStatus.value = e.message.toString()
+            Log.e("NAVIDROME", "Music server request failed (${e.javaClass.simpleName})")
+            navidromeStatus.value = "Music server request failed"
         } finally {
             NavidromeManager.setSyncingStatus(false)
         }

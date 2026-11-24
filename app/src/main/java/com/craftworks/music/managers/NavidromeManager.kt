@@ -37,7 +37,7 @@ object NavidromeManager {
     private val _syncStatus = MutableStateFlow(false)
 
     suspend fun addServer(server: NavidromeProvider, isPing: Boolean = false) {
-        Log.d("NAVIDROME", "Added server $server")
+        Log.d("NAVIDROME", "Adding music server")
         server.url = if (!server.url.trim().startsWith("http"))
             "http://" + server.url.trim()
         else

@@ -6,16 +6,6 @@ import com.craftworks.music.data.datasource.navidrome.NavidromeDataSource
 import com.craftworks.music.data.model.MediaData
 import com.craftworks.music.data.model.artistList
 import com.craftworks.music.data.model.toMediaItem
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-
-@Serializable
-@SerialName("artists")
-data class Artists(val index: List<index>)
-
-@Serializable
-data class index(val artist: List<MediaData.Artist>? = listOf())
-
 fun parseNavidromeArtistsJSON(
     response: String
 ) : List<MediaData.Artist> {

@@ -7,11 +7,6 @@ import androidx.media3.common.util.UnstableApi
 import com.craftworks.music.data.datasource.navidrome.NavidromeDataSource
 import com.craftworks.music.data.model.MediaData
 import com.craftworks.music.data.model.toMediaItem
-import kotlinx.serialization.Serializable
-
-@Serializable
-data class albumList(val album: List<MediaData.Album>? = listOf())
-
 fun parseNavidromeAlbumListJSON(
     response: String,
     navidromeUrl: String,

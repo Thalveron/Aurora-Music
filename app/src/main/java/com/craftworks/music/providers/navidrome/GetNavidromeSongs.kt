@@ -9,15 +9,6 @@ import com.craftworks.music.data.model.albumList
 import com.craftworks.music.data.model.artistList
 import com.craftworks.music.data.model.songsList
 import com.craftworks.music.data.model.toMediaItem
-import kotlinx.serialization.Serializable
-
-@Serializable
-data class SearchResult3(
-    val song: List<MediaData.Song>? = listOf(),
-    val album: List<MediaData.Album>? = listOf(),
-    val artist: List<MediaData.Artist>? = listOf(),
-)
-
 @OptIn(UnstableApi::class)
 fun parseNavidromeSearch3JSON(
     response: String,

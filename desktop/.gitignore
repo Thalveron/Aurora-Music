@@ -1,0 +1,5 @@
+/dist/
+/jvm/build/
+/jvm/.kotlin/
+*.exe
+*.log
