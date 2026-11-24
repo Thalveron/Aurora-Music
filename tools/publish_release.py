@@ -19,11 +19,15 @@ def main():
         print('Verified APK package, version, signature and available publishing tools');return
     code=int(m[2]);version=m[3];tag='v'+version;path=root/'updates/latest.json';old=json.loads(path.read_text()) if path.exists() else {}
     if code<=old.get('latest',{}).get('versionCode',0):p.error('Increase versionCode before publishing')
-    if subprocess.run([a.gh,'release','view',tag,'--repo',REPO],capture_output=True).returncode==0:p.error('Release already exists; do not replace its APK')
-    digest=hashlib.sha256(apk.read_bytes()).hexdigest();name='Aurora-Music-v'+version+'.apk'
+    name='Aurora-Music-v'+version+'.apk'
+    # Clients share one release per version, so the tag may already exist with other assets.
+    seen=subprocess.run([a.gh,'release','view',tag,'--repo',REPO,'--json','assets','--jq','.assets[].name'],capture_output=True,text=True);exists=seen.returncode==0
+    if exists and name in seen.stdout.split('\n'):p.error('Release already has this APK; do not replace it')
+    digest=hashlib.sha256(apk.read_bytes()).hexdigest()
     with tempfile.TemporaryDirectory(prefix='aurora-music-release-') as temp:
-        asset=Path(temp)/name;shutil.copy2(apk,asset);checksum=Path(temp)/'SHA256SUMS.txt';checksum.write_text(digest+'  '+name+'\n')
-        run([a.gh,'release','create',tag,asset,checksum,'--repo',REPO,'--target',run(['git','rev-parse','HEAD'],root),'--title','Aurora Music '+tag,'--notes-file',notes],root)
+        asset=Path(temp)/name;shutil.copy2(apk,asset);checksum=Path(temp)/(name+'.sha256');checksum.write_text(digest+'  '+name+'\n')
+        if exists:run([a.gh,'release','upload',tag,asset,checksum,'--repo',REPO],root)
+        else:run([a.gh,'release','create',tag,asset,checksum,'--repo',REPO,'--target',run(['git','rev-parse','HEAD'],root),'--title','Aurora Music '+tag,'--notes-file',notes],root)
     latest={'package':m[1],'version':version,'versionCode':code,'minSdk':23,'url':'https://github.com/'+REPO+'/releases/download/'+tag+'/'+name,'sha256':digest,'bytes':apk.stat().st_size,'notes':notes.read_text()[:12000]}
     history=([old['latest']] if old.get('latest') else [])+old.get('history',[]);path.parent.mkdir(exist_ok=True);path.write_text(json.dumps({'schema':1,'latest':latest,'history':history},ensure_ascii=False,indent=2)+'\n')
     run(['git','add','updates/latest.json'],root);run(['git','commit','-m','Publish update metadata for '+tag],root);run(['git','-c','credential.helper=','-c','credential.helper=!'+shlex.quote(str(a.gh))+' auth git-credential','push','origin','HEAD:main'],root)

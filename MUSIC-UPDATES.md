@@ -48,4 +48,4 @@ Downloads are stored in the app private `music-updates/` directory. A non-export
 
 `bytes` and `sha256` must be calculated from the final signed APK. The example placeholders above are not installable metadata.
 
-For future releases, increase both `versionName` and `versionCode`, sign with the existing private signing key and run `tools/publish_release.py`. It uploads the release first, then updates the manifest. Signing keys and user data must never be committed.
+For future releases, increase both `versionName` and `versionCode`, sign with the existing private signing key and run `tools/publish_release.py`. It uploads the APK first, then updates the manifest. All clients share one release per version: if the tag already exists (for example with the Windows installer), the APK and its `.sha256` file are added to it; an APK that is already there is never replaced. Signing keys and user data must never be committed.
